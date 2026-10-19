@@ -1,0 +1,14 @@
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<title>Rezona Lab</title>
+<defs>
+<filter id="lab-sticker-shadow" x="-20%" y="-20%" width="140%" height="160%">
+<feDropShadow dx="0" dy="0.507" stdDeviation="0.2535" flood-color="#000000" flood-opacity="0.4"/>
+</filter>
+</defs>
+<path id="Exclude" fill-rule="evenodd" clip-rule="evenodd" d="M17.5647 0C19.2445 0.263277 22.6039 1.82369 22.6039 5.95898C22.6039 9.08274 20.358 10.5725 18.4113 11.1664C15.9816 11.5761 13.9002 11.633 12.1764 11.4859C9.14312 11.2271 7.25301 10.3433 6.49482 9.68477L5.82461 10.4512C6.59655 11.1216 8.08209 11.8393 10.2222 12.2453V28H0V0H17.5647ZM18.0962 12.2465C24.496 16.1879 26.6538 24.2406 26.9231 28H11.4458V12.4324C11.6553 12.4573 11.8699 12.4797 12.0894 12.4984C13.7867 12.6432 15.7919 12.5987 18.0962 12.2465ZM7.41431 5.16953C6.89746 5.16953 6.47836 5.58727 6.47836 6.10273C6.47837 6.61819 6.89747 7.03594 7.41431 7.03594C7.93109 7.03587 8.34985 6.61815 8.34987 6.10273C8.34987 5.58731 7.9311 5.1696 7.41431 5.16953Z" fill="#FF6F03"/>
+<g transform="rotate(-5 19.83 18.849)">
+<rect x="13.0745" y="15.747" width="13.511" height="6.204" rx="1.353" fill="#FFFFFF" filter="url(#lab-sticker-shadow)"/>
+<rect x="13.4975" y="16.253" width="12.665" height="5.192" rx="1.015" fill="#FF6F03"/>
+<text x="19.83" y="18.849" fill="#FFFFFF" font-family="Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="900" font-size="4.058" letter-spacing="0.1" text-anchor="middle" dominant-baseline="central">LAB</text>
+</g>
+</svg>

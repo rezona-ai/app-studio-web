@@ -1,0 +1,67 @@
+# Dev/develop 手动部署旁路。
+#
+# 🔴 **刻意没有 push 触发器**：develop 的常态部署源是机器分支 `test`（= dev + 全部带
+# `deploy-for-testing` 标签的 PR），由 deploy_dev_pr.yml 合成后部署。若这里再挂
+# `push: branches: [dev]`，推一次 dev 会同时触发两条链打同一个环境，靠 concurrency 串行后
+# 谁最后落地取决于排队顺序——develop 上跑的是 dev 还是叠合体就成了掷骰子。
+# 本 workflow 只在叠合链故障时手动 dispatch 直发用（默认 dev）。
+name: Deploy (develop)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 要部署的分支（默认 dev；只接受 dev / test，填别的会被部署源校验拦下）
+        default: dev
+        type: string
+
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false
+
+jobs:
+  # 部署目标由运维变量 `WEB_DEPLOY_TARGETS`（逗号分隔）决定，不是代码常量。
+  # 未配置时解析为单目标 `rezonaai` —— 与迁移前逐字一致的行为。
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.resolve.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: deploy/deploy_targets.sh
+          sparse-checkout-cone-mode: false
+      - id: resolve
+        env:
+          TARGETS: ${{ vars.WEB_DEPLOY_TARGETS }}
+        run: bash deploy/deploy_targets.sh
+
+  deploy:
+    needs: [targets]
+    # fail-fast: false —— 一条腿失败**不取消**另一条在途的腿。本仓每条腿自成闭环
+    # （构建 → apply → rollout status 都在 _deploy.yml 内部），所以矩阵红了也不会
+    # 让另一个项目少做任何事；需要防的只是「互相取消」。
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      gcp_target: ${{ matrix.target.gcp_target }}
+      environment: develop
+      namespace: rezonalab-game-dev
+      app_env: production
+      # Dev 生产化:HA 下限 2(滚动/节点维护期不掉到零端点),上限 5
+      hpa_min: "2"
+      hpa_max: "5"
+      # develop 应用容器资源(仅本环境抬高;stage/prod 不传 → 用 _deploy.yml 基线默认)
+      app_cpu_request: "500m"
+      app_mem_request: "1Gi"
+      app_cpu_limit: "4"
+      app_mem_limit: "8Gi"
+      # pgc dev 后端（裸域名共享网关；koubou 同址，服务前缀在代码层拼，WS 由 PGC 基址派生 https→wss）
+      pgc_base_url: https://devlab.rezona.ai
+      public_pgc_base_url: https://devlab.rezona.ai
+      # 只剩 workflow_dispatch 一种触发，inputs.branch 恒有值（默认 dev），无需 github.sha 兜底
+      ref: ${{ inputs.branch }}

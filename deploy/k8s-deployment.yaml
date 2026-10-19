@@ -1,0 +1,149 @@
+# 由 _deploy.yml 经 envsubst 渲染后 kubectl apply。
+# 变量：$ENVIRONMENT $NAMESPACE $IMAGE_TAG $APP_RUNTIME_ENV $GITHUB_SHA $DEPLOYED_AT
+#       $PGC_BASE_URL
+#
+# 对外入口：复用现有外部 HTTPS LB（rezona-lab-${ENV}-urlmap，即 devlab/stalab/lab.rezona.ai 前门），
+# 加 path rule /game + /game/* → 本服务的 standalone NEG（同 biz-api 接法）。
+# 该 url-map 由本前端 / pgc / koubou / Rezona Canvas / biz-api 五方共用，靠 path 前缀分流。
+#   - Service 为 ClusterIP + standalone NEG 注解；
+#   - WS 连接最大存活时长由 backend-service 的 timeoutSec=3600 控制（非 BackendConfig）；
+#   - GCLB 终究会回收长连接，客户端已有指数退避重连兜底。
+# LB 接入是一次性 SRE 操作，见 deploy/setup-lb.sh（不进 CI）。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rezonalab-game-web-${ENVIRONMENT}
+  namespace: ${NAMESPACE}
+  labels:
+    app: rezonalab-game-web
+    env: ${ENVIRONMENT}
+spec:
+  replicas: 2   # 初始副本(随后由 HPA 接管);min=2 起步,保证滚动/节点维护期不掉到零端点
+  minReadySeconds: 10   # 新 pod 就绪后再稳定 10s 才计入可用,缓冲 NEG 端点同步
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # 新 pod 先就绪再下线旧 pod:发布全程容量不缩水,standalone NEG 不会掉到零端点
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rezonalab-game-web
+      env: ${ENVIRONMENT}
+  template:
+    metadata:
+      labels:
+        app: rezonalab-game-web
+        env: ${ENVIRONMENT}
+      annotations:
+        app.kubernetes.io/git-sha: "${GITHUB_SHA}"
+        app.kubernetes.io/deployed-at: "${DEPLOYED_AT}"
+    spec:
+      # 优雅停机预算:覆盖 preStop(10s,等 GCLB 从 NEG 摘除本端点) + 进程收尾。
+      # WS 连接最长 3600s 不等其自然结束,靠客户端指数退避重连兜底。
+      terminationGracePeriodSeconds: 30
+      # 跨 zone 打散（min≥2 才有意义）：Autopilot 默认调度可能把多 Pod 放同一 zone，
+      # min=2 + PDB 仍不保证单 AZ 失效不全量不可用。maxSkew=1 让各 zone Pod 数差≤1；
+      # whenUnsatisfiable=ScheduleAnyway（软约束，放不下也不 pending）。labelSelector 用
+      # pod 真实标签 app+env（与 selector/PDB 同源）。
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: rezonalab-game-web
+              env: ${ENVIRONMENT}
+      containers:
+        - name: rezonalab-game-web
+          image: ${IMAGE_TAG}
+          ports:
+            - name: http
+              containerPort: 8080   # 用集群健康检查防火墙已放行的端口（非 3000）
+          lifecycle:
+            preStop:
+              exec:
+                # 先 sleep 让 GCLB 把本 endpoint 从 standalone NEG 摘除,再收 SIGTERM,
+                # 避免滚动/缩容时在途请求被路由到正在终止的 pod(掉零端点/重置的根因之一)。
+                command: ["sleep", "10"]
+          env:
+            - name: NODE_ENV
+              value: "${APP_RUNTIME_ENV}"
+            - name: PORT
+              value: "8080"
+            # pgc/koubou 后端（服务端代理）。URL 经 envsubst 注入。
+            # 鉴权走 cookie 制:浏览器在 *.rezona.ai 下携带 session cookie,BFF 原样转发——
+            # 不再需要服务账号凭据(已去除 PGC_EMAIL/PGC_PASSWORD 与 rezonalab-game-web-secret)。
+            - name: PGC_BASE_URL
+              value: "${PGC_BASE_URL}"
+            # Datadog APM（BFF 服务端 trace，dev 先行）。DD_NODE_OPTIONS 仅 develop 注入
+            # "--import dd-trace/initialize.mjs"（ESM preload，Node≥20.6 一步 init+loader hook），
+            # 其余环境为空 = 不 preload tracer（prod 零变更）。DD_* 始终注入（未 preload 时无副作用）。
+            # DD_AGENT_HOST 取本节点上的 Datadog Agent DaemonSet（trace → :8126）。
+            - name: NODE_OPTIONS
+              value: "${DD_NODE_OPTIONS}"
+            - name: DD_TRACE_ENABLED
+              value: "${DD_TRACE_ENABLED}"
+            - name: DD_SERVICE
+              value: "rezonalab-game-web"
+            - name: DD_ENV
+              value: "${ENVIRONMENT}"
+            - name: DD_VERSION
+              value: "${GITHUB_SHA}"
+            - name: DD_AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+          # basePath=/game 后根路径 / 会 404，探针须打 /game
+          # 探针打廉价健康端点（不再整页 SSR /game）：readyz 进程就绪即 200、healthz 仅证存活，
+          # 均不依赖上游，降低探针成本与误判（见 src/app/api/{readyz,healthz}/route.ts）。
+          readinessProbe:
+            httpGet:
+              path: /game/api/readyz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /game/api/healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # 资源按环境参数化(见 _deploy.yml 的 app_cpu/mem inputs):默认基线 250m/512Mi·1/1Gi,
+          # develop 在 deploy_dev.yml 抬到 500m/1Gi·4/8Gi;模板共享三环境,严禁在此硬编码。
+          resources:
+            requests:
+              cpu: "${APP_CPU_REQUEST}"
+              memory: "${APP_MEM_REQUEST}"
+            limits:
+              cpu: "${APP_CPU_LIMIT}"
+              memory: "${APP_MEM_LIMIT}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rezonalab-game-web-${ENVIRONMENT}-service
+  namespace: ${NAMESPACE}
+  labels:
+    app: rezonalab-game-web
+    env: ${ENVIRONMENT}
+  annotations:
+    # Standalone NEG（独立于 GKE Ingress）：GKE 按 zone 自动建同名 NEG
+    # rezonalab-game-web-${ENVIRONMENT}-neg，由现有外部 LB 的 backend-service 手工挂载。
+    # 注意：此模式下 BackendConfig 不生效，WS 超时(timeoutSec=3600)须直接设在
+    # backend-service 上（见 deploy/setup-lb.sh）。
+    cloud.google.com/neg: '{"exposed_ports": {"80": {"name": "rezonalab-game-web-${ENVIRONMENT}-neg"}}}'
+spec:
+  type: ClusterIP
+  selector:
+    app: rezonalab-game-web
+    env: ${ENVIRONMENT}
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP

@@ -1,0 +1,7 @@
+# 本文件此前不存在——刻意只列一项，不顺手把 node_modules 之类加进来：
+# 那会改变现有构建的上下文内容与缓存键，而本次改动的目标是「零行为变化」。
+#
+# `.control-plane/` 是 _deploy.yml 从 workflow 自己那个版本拉下来的控制面脚本
+# （见该文件的 "Checkout control-plane helpers"）。dockerfile 的 build 阶段有
+# `COPY . .`，不排除的话它会进构建上下文、白白打穿构建缓存。
+.control-plane/

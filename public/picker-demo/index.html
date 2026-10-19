@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>picker demo · 宿主页(模拟 PreviewPanel)</title>
+<style>
+  body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #1a1a1f; color: #eee; }
+  #stage { flex: 1; display: grid; place-items: center; }
+  iframe { width: 282px; height: 519px; border: 0; border-radius: 10px; background: #000; }
+  #side { width: 320px; padding: 16px; border-left: 1px solid #333; overflow: auto; }
+  button { padding: 8px 16px; border: 0; border-radius: 8px; cursor: pointer; font-weight: bold; }
+  button.on { background: #4f8cff; color: #fff; }
+  .ref { margin-top: 8px; padding: 8px 10px; background: #2a2a32; border-radius: 8px; font-size: 13px; }
+  .ref b { color: #8ab4ff; }
+  pre { margin: 4px 0 0; font-size: 11px; color: #999; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="stage"><iframe id="game" src="./game.html"></iframe></div>
+<div id="side">
+  <button id="toggle">开启编辑模式</button>
+  <p style="font-size:12px;color:#888">编辑模式下游戏不可玩,hover 高亮、点击选中,选中结果作为「引用块」列在下方(模拟加入对话框)。</p>
+  <div id="refs"></div>
+</div>
+<script>
+const frame = document.getElementById('game');
+const toggle = document.getElementById('toggle');
+const refs = document.getElementById('refs');
+let editing = false;
+
+toggle.onclick = () => {
+  editing = !editing;
+  frame.contentWindow.postMessage({ type: editing ? 'picker:enable' : 'picker:disable' }, '*');
+  toggle.textContent = editing ? '退出编辑模式' : '开启编辑模式';
+  toggle.className = editing ? 'on' : '';
+};
+
+window.addEventListener('message', (e) => {
+  const { type, payload } = e.data || {};
+  if (type === 'picker:ready') console.log('picker SDK 就绪');
+  if (type === 'picker:selected') {
+    const div = document.createElement('div');
+    div.className = 'ref';
+    div.innerHTML = '<b>@' + payload.name + '</b><pre>' +
+      JSON.stringify(payload, null, 2) + '</pre>';
+    refs.prepend(div);
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,363 @@
+{
+  "$comment": "上线看板的需求归属映射（设计稿 docs/superpowers/specs/2026-09-02-board-epics-design.md）。branches 写精确分支名；globs 可选、只支持 *；同一分支不得归两个需求；internalPrefixes 命中的分支一律进表尾「工程内部」组。",
+  "internalPrefixes": [
+    "docs/",
+    "chore/"
+  ],
+  "epics": [
+    {
+      "title": "画布分组框",
+      "branches": [
+        "feat/canvas-groups",
+        "feat/canvas-group-title-and-key-delete",
+        "feat/canvas-group-theming-menu",
+        "feat/canvas-group-a11y-and-menu-debts",
+        "feat/group-resize-snap-ui",
+        "feat/group-frame-align-snap",
+        "feat/group-selection-morph",
+        "feat/group-as-card-selection",
+        "fix/group-marquee-selection-and-undo-toast",
+        "fix/group-delete-undo-member-positions",
+        "fix/group-undo-gaps",
+        "fix/canvas-post-migration-polish",
+        "fix/credit-and-visibility-guards"
+      ]
+    },
+    {
+      "title": "一键整理",
+      "branches": [
+        "worktree-feat+tidy-dag-v2",
+        "worktree-feat+tidy-ref-edges",
+        "feat/tidy-groups-as-boxes"
+      ]
+    },
+    {
+      "title": "画布撤销与拖拽守卫",
+      "branches": [
+        "worktree-feat+canvas-undo",
+        "fix/undo-and-overlay-guards",
+        "fix/drag-commit-guards",
+        "feat/canvas-align-guides",
+        "feat/canvas-keyboard",
+        "fix/keyboard-layer-guards"
+      ]
+    },
+    {
+      "title": "生成失败重试",
+      "branches": [
+        "feat/canvas-gen-failure-retry",
+        "fix/retry-single-routing",
+        "fix/retry-route-content-policy",
+        "fix/retry-path-guards",
+        "fix/retry-form-replace",
+        "fix/input-rejected-route",
+        "fix/orphan-gen-task-no-delete",
+        "fix/gen-task-deadline-and-placeholder",
+        "fix/inflight-placeholder-persist",
+        "fix/provenance-and-badge-consistency"
+      ]
+    },
+    {
+      "title": "资产生成面板",
+      "branches": [
+        "worktree-feat+gen-form-figma-align",
+        "worktree-feat+gen-advanced-popover-align",
+        "worktree-feat+gen-form-canvas-pick",
+        "worktree-feat+gen-lastframe-canvas-pick",
+        "worktree-feat+multi-ref-edges",
+        "feat/generate-form-drag",
+        "feat/canvas-estimate",
+        "feat/gen-text-prompt-optional",
+        "feat/pick-hint-below-search"
+      ]
+    },
+    {
+      "title": "资产溯源与 agent 导入",
+      "branches": [
+        "feat/canvas-provenance",
+        "feat/agent-provenance",
+        "feat/agent-asset-lineage",
+        "feat/ui-tweaks-details-submenu",
+        "feat/agent-image-import-reliability"
+      ]
+    },
+    {
+      "title": "画布坐标回写可靠性",
+      "branches": [
+        "feat/canvas-persist-reliability",
+        "feat/canvas-batch-position"
+      ]
+    },
+    {
+      "title": "资产列表与搜索",
+      "branches": [
+        "feat/canvas-list-view",
+        "fix/canvas-list-and-feel",
+        "feat/canvas-search-jump"
+      ]
+    },
+    {
+      "title": "画布批量操作与文件输入",
+      "branches": [
+        "feat/canvas-bulk-actions",
+        "feat/canvas-input-browse",
+        "feat/paste-assets",
+        "feat/lightbox-action-bar"
+      ]
+    },
+    {
+      "title": "文本卡",
+      "branches": [
+        "feat/canvas-text-card",
+        "feat/canvas-text-item-endpoint",
+        "feat/document-asset-inline"
+      ]
+    },
+    {
+      "title": "画布性能与虚拟化",
+      "branches": [
+        "feat/perf-optimization",
+        "feat/canvas-virtualization-ux",
+        "feat/streaming-perf-and-import-cap",
+        "worktree-fix+reduce-motion-display-none"
+      ]
+    },
+    {
+      "title": "画布体验打磨",
+      "branches": [
+        "feat/canvas-ux-refinements",
+        "feat/canvas-ux-refinements-2",
+        "feat/canvas-tool-toggle",
+        "feat/canvas-task-visibility",
+        "feat/canvas-time-dimension",
+        "feat/asset-card-loading-visuals",
+        "feat/cancel-generating-on-delete",
+        "worktree-feat+card-drag-and-hover-plus"
+      ]
+    },
+    {
+      "title": "3D 派生与动作预览",
+      "branches": [
+        "feat/rig-dialog-redesign",
+        "feat/rig-animation-demos",
+        "feat/rig-preview-menu-and-centering",
+        "feat/3d-axis-gizmo"
+      ]
+    },
+    {
+      "title": "游戏导出",
+      "branches": [
+        "feat/export-apk-menu",
+        "feat/export-play-bundle",
+        "feat/export-steam-package"
+      ]
+    },
+    {
+      "title": "游戏版本时间线与下载",
+      "branches": [
+        "fix/version-build-polling",
+        "fix/download-filename-project-version"
+      ]
+    },
+    {
+      "title": "回放播放器",
+      "branches": [
+        "feat/replay-onboarding-player",
+        "feat/replay-optimizations",
+        "feat/replay-player-optimizations",
+        "feat/replay-figma-ui",
+        "feat/replay-analytics",
+        "feat/replay-refresh-versions",
+        "feat/preview-replay-soft-loading",
+        "fix/replay-total-latest",
+        "fix/share-boot-loading-stuck"
+      ]
+    },
+    {
+      "title": "分享页",
+      "branches": [
+        "feat/share-page-topbar",
+        "feat/share-remix-toggle",
+        "fix/share-topbar-buttons"
+      ]
+    },
+    {
+      "title": "Rezona 发布与绑定",
+      "branches": [
+        "feat/rezona-publish-direct",
+        "feat/rezona-link-redesign",
+        "feat/rezona-cover-upload",
+        "fix/rezona-modal-never-backdrop-close",
+        "fix/rezona-title-default"
+      ]
+    },
+    {
+      "title": "Rezona 发布到已导入游戏（更新已发布游戏）",
+      "branches": [
+        "feat/rezona-publish-existing-game",
+        "feat/rezona-publish-game-name"
+      ]
+    },
+    {
+      "title": "积分与充值",
+      "branches": [
+        "feat/topup-modal",
+        "feat/topup-paid-autoclose",
+        "fix/topup-min-amount",
+        "feat/insufficient-credits-modal",
+        "feat/credit-dynamic-refresh",
+        "feat/version-credits-breakdown",
+        "feat/subscription-upsell-modal"
+      ]
+    },
+    {
+      "title": "模型选择",
+      "branches": [
+        "feat/model-selector-icon-desc",
+        "feat/model-selector-kimi-gpt56",
+        "feat/model-per-project",
+        "feat/model-lock-modal",
+        "feat/new-user-model-gate",
+        "feat/seed-gen-models",
+        "feat/gpt-model-prefix-fallback",
+        "feat/gpt-label-spaced-format",
+        "feat/session-model-adopt"
+      ]
+    },
+    {
+      "title": "对话连接韧性与刷新恢复",
+      "branches": [
+        "feat/chat-experience-hardening",
+        "feat/ws-wake-reconnect",
+        "feat/run-rest-tracking",
+        "feat/refresh-recovery-state",
+        "feat/ready-dedup-exempt",
+        "feat/ready-source-split",
+        "feat/result-message-closes-run",
+        "fix/refresh-restore-turn-model-and-subagents",
+        "fix/history-page-50",
+        "fix/history-usermessage-meta-leak"
+      ]
+    },
+    {
+      "title": "agent 错误透传与重试",
+      "branches": [
+        "feat/agent-error-passthrough-retry",
+        "fix/agent-error-bubble-polish",
+        "fix/retry-bubble-polish",
+        "feat/model-switch-on-fatal-error"
+      ]
+    },
+    {
+      "title": "对话输入与消息",
+      "branches": [
+        "feat/chat-media-strip",
+        "feat/chat-message-copy-edit",
+        "feat/chat-upload-align-canvas",
+        "feat/composer-resizable-height",
+        "feat/composer-skill-button",
+        "feat/skill-selector",
+        "worktree-feat+asset-mention-token",
+        "feat/upload-progress-streaming",
+        "feat/handoff-sessionstorage-prelude"
+      ]
+    },
+    {
+      "title": "planner 与子代理任务卡",
+      "branches": [
+        "feat/planner-mode",
+        "feat/subagent-task-view",
+        "worktree-feat+plan-card-scroll-zindex",
+        "worktree-feat+plan-tasks-reset-per-run"
+      ]
+    },
+    {
+      "title": "项目压缩包导入",
+      "branches": [
+        "feat/project-zip-import",
+        "feat/zip-import-ux",
+        "feat/import-modal-v3",
+        "fix/import-resume"
+      ]
+    },
+    {
+      "title": "弹窗遮罩关闭策略",
+      "branches": [
+        "feat/form-modal-no-backdrop-close",
+        "feat/modal-backdrop-close-when-pristine"
+      ]
+    },
+    {
+      "title": "预览栏与边栏布局",
+      "branches": [
+        "feat/preview-resizable-width",
+        "feat/preview-device-toggle",
+        "feat/preview-follow-latest-version",
+        "feat/auto-expand-full-preview",
+        "feat/sidebar-collapse-handles",
+        "feat/sidebar-collision-on-resize",
+        "feat/edge-handle-liquid-follow",
+        "worktree-feat+fullscreen-preview-instant-loading"
+      ]
+    },
+    {
+      "title": "加载动画与品牌",
+      "branches": [
+        "feat/loading-animation",
+        "feat/brand-loading-animation",
+        "feat/rezonalab-rebrand"
+      ]
+    },
+    {
+      "title": "国际化",
+      "branches": [
+        "feat/i18n-expand-11-locales",
+        "feat/i18n-project-menu"
+      ]
+    },
+    {
+      "title": "埋点",
+      "branches": [
+        "feat/ga4-analytics"
+      ]
+    },
+    {
+      "title": "上线看板",
+      "branches": [
+        "feat/release-board",
+        "fix/release-board-branch-identity",
+        "fix/release-board-merge-parse",
+        "fix/board-merge-subject-new-format",
+        "feat/board-epics"
+      ]
+    },
+    {
+      "title": "CI/CD 与分支策略",
+      "branches": [
+        "feat/deploy-for-testing-label",
+        "fix/compose-order"
+      ]
+    },
+    {
+      "title": "本地开发环境",
+      "branches": [
+        "feat/dev-ws-proxy-affinity",
+        "feat/local-koubou-debug",
+        "worktree-feat+codex-backend-integration"
+      ]
+    },
+    {
+      "title": "资产直推游戏引擎（Engine Bridge）",
+      "branches": [
+        "feat/engine-bridge"
+      ]
+    },
+    {
+      "title": "Suno 音乐生成接入",
+      "branches": [
+        "feat/suno-music-web",
+        "feat/suno-music-options"
+      ]
+    }
+  ]
+}

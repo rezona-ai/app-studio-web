@@ -1,0 +1,40 @@
+# 集群内 k6 压测 Job：直连 ClusterIP Service 打 rezonalab-game-web SSR /game，绕过外部 LB 边缘限流。
+# 脚本经 ConfigMap 挂载。用法（namespace 为 dev 的 rezonalab-game-dev，其他环境替换 -n）：
+#   kubectl create configmap k6-rezonalab-script -n rezonalab-game-dev --from-file=script.js=loadtest/rezonalab-incluster-ssr.js
+#   kubectl apply -f loadtest/k6-incluster-job.yaml
+#   kubectl logs -f job/k6-rezonalab -n rezonalab-game-dev      # 看 k6 summary
+#   kubectl delete job k6-rezonalab -n rezonalab-game-dev && kubectl delete configmap k6-rezonalab-script -n rezonalab-game-dev
+# 跑完务必删除 Job + ConfigMap，别在共享 dev 留测试资源。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-rezonalab
+  namespace: rezonalab-game-dev
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: k6-rezonalab
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.55.0
+          args: ["run", "/scripts/script.js"]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+          resources:
+            # 负载生成器自身要够大才能打满 400 VU，否则瓶颈在 k6 而非被测应用。
+            requests:
+              cpu: "2"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: script
+          configMap:
+            name: k6-rezonalab-script

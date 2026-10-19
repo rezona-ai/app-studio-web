@@ -1,0 +1,27 @@
+name: GCP Auth
+description: Authenticate to GCP and configure Docker for Artifact Registry
+inputs:
+  credentials_json:
+    description: GCP service account key JSON
+    required: true
+  project_id:
+    description: GCP project ID
+    required: true
+  artifact_registry_region:
+    description: Artifact Registry region (e.g., us-east1)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v3
+      with:
+        credentials_json: ${{ inputs.credentials_json }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v3
+      with:
+        project_id: ${{ inputs.project_id }}
+    - name: Log in to Google Artifact Registry
+      shell: bash
+      run: |
+        gcloud --quiet auth configure-docker ${{ inputs.artifact_registry_region }}-docker.pkg.dev

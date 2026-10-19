@@ -1,0 +1,69 @@
+# 共享 url-map 路由巡检（只读，不修改任何 GCP 资源）。
+#
+# rezona-lab-{dev,stage,prod}-urlmap 由本前端 / pgc / koubou / Rezona Canvas / biz-api 共用，
+# `gcloud compute url-maps patch` 是整体替换而非合并——后写入者会把先写入者的规则一起冲掉。
+# 2026-07-29 实发一次：三人先后各自 patch，后两位把第一位加的 pgc 规则连同 Rezona Canvas 的规则一起冲掉，
+# 所有 /game/pgcserver/* 与 /canvas* 落到官网 SPA，无人发现直到用户在浏览器撞到。
+#
+# ⚠️ 本文件必须在**默认分支(main)**上才会被 schedule 触发——GitHub 的 schedule 只从默认分支运行。
+#    留在 dev 上等于这条防线从未启用（rezonalab-game-server 就踩了这个，实测 workflow 一次没跑过）。
+name: LB route audit (read-only)
+
+on:
+  schedule:
+    - cron: "37 */4 * * *" # 每 4 小时；错开 pgc 仓的 :17 避免同时打 API
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      # 先判「secret 是否真的缺」。不能对认证步骤用 continue-on-error：
+      # 那样 GCP_SA_KEY 存在但已过期/被吊销时，认证失败会被吞成 job 成功，
+      # 等于在凭据最需要被修的时候把监控静默关掉。缺 secret 才跳过。
+      - name: Detect credentials
+        id: creds
+        env:
+          SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "${SA_KEY:-}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::GCP_SA_KEY 未配置，跳过路由巡检（不阻断）。配上即自动启用。"
+          fi
+
+      - name: Authenticate to Google Cloud
+        if: steps.creds.outputs.present == 'true'
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: steps.creds.outputs.present == 'true'
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Set up pnpm
+        if: steps.creds.outputs.present == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node 22
+        if: steps.creds.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        if: steps.creds.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit shared url-map routes
+        if: steps.creds.outputs.present == 'true'
+        run: pnpm lb:audit

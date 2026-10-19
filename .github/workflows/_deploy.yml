@@ -1,0 +1,278 @@
+# 可复用部署流水线：Buildx → Artifact Registry → envsubst|kubectl → rollout。
+# 由 deploy_dev.yml / deploy_stage.yml / deploy.yml 通过 workflow_call 调用。
+# 精简版：运行时不碰 GCP（无 GCS/CloudSQL），因此不注入 workload GSA，
+#         Pod 用命名空间默认 SA；也无 DB 迁移步骤。
+name: _deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: develop | stage | production
+        required: true
+        type: string
+      namespace:
+        # 与 environment 名解耦：environment 决定资源名后缀与 GH 环境作用域，
+        # namespace 是集群里的实际命名空间（lab 三仓共用 rezonalab-game-{dev,stage,prod}）。
+        # 绝不能让 NAMESPACE=environment——那会把资源建进 taluna 现网的 develop/production，
+        # 覆盖已跑 51 天的 taluna-game-develop。
+        description: K8s 命名空间
+        required: true
+        type: string
+      app_env:
+        description: NODE_ENV 运行时（容器内统一 production，环境靠命名空间隔离）
+        required: true
+        type: string
+      hpa_min:
+        required: true
+        type: string
+      hpa_max:
+        required: true
+        type: string
+      ref:
+        description: 要部署的 git ref
+        required: true
+        type: string
+      gcp_target:
+        # 部署到哪个 GCP project。缺省是老项目，**未显式传值时行为与迁移前逐字一致**。
+        # 取值由 deploy/deploy_targets.sh 从 vars.WEB_DEPLOY_TARGETS 解析出来。
+        description: rezonaai | gtxy-rzn-infra
+        required: false
+        default: rezonaai
+        type: string
+      pgc_base_url:
+        description: pgc/koubou 后端地址（服务端代理/登录；koubou 同址）；空则该环境后端不可用
+        required: false
+        default: ""
+        type: string
+      public_pgc_base_url:
+        description: 前端基址（构建期烘入；媒体直连 + 由其 https→wss 派生 Koubou WS）
+        required: false
+        default: ""
+        type: string
+      # 应用容器资源（按环境参数化）：默认沿用基线 250m/512Mi · 1/1Gi，
+      # 故 stage/production 不传时维持原值；develop 在 deploy_dev.yml 显式抬高到 500m/1Gi · 4/8Gi。
+      # 模板共享于三环境，硬编码会静默放大 stage/prod 资源并稀释其 HPA utilization，必须走 input。
+      app_cpu_request:
+        required: false
+        default: "250m"
+        type: string
+      app_mem_request:
+        required: false
+        default: "512Mi"
+        type: string
+      app_cpu_limit:
+        required: false
+        default: "1"
+        type: string
+      app_mem_limit:
+        required: false
+        default: "1Gi"
+        type: string
+
+env:
+  # ⚠️ PROJECT_ID / CLUSTER_NAME / REPOSITORY_NAME **不再在这里定值**：它们随
+  # inputs.gcp_target 变化，由下面「Resolve deployment target」步骤经
+  # deploy/render_env.sh 写进 $GITHUB_ENV。放在这里会被 job 级 env 静态固定，
+  # 于是新项目那条腿会静默部到老项目上——最坏的一类故障：全绿，但部错了地方。
+  REGION: us-east1
+  ARTIFACT_REGISTRY_REGION: us-east1
+  SERVICE: rezonalab-game-web
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    # GH Environment 按目标分叉：新项目那条腿取 `<env>-gtxy` 作用域里的
+    # GCP_SA_KEY（新项目的部署身份）。老项目那条腿的作用域逐字不变。
+    environment: ${{ inputs.gcp_target == 'gtxy-rzn-infra' && format('{0}-gtxy', inputs.environment) || inputs.environment }}
+    outputs:
+      image-tag: ${{ steps.image_tag.outputs.image-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      # 部署源校验:每个环境只认自己那条线,填错 ref 就地失败,不让它跑到构建与 rollout。
+      # 口径见 specs/2026-08-27-merge-strategy-alignment-design.md §5.5 ②:
+      #   production ← release/*   ·   stage ← main   ·   develop ← test 或 dev
+      # 🔴 判祖先靠的是 origin/* 引用在场,而这由上面的 `fetch-depth: 0` 保证——
+      #    actions/checkout 在全量模式下用 `+refs/heads/*:refs/remotes/origin/*` 拉全部分支。
+      #    **去掉 fetch-depth: 0,本校验会对所有环境假阴性(每次部署都失败)。**
+      #    下面的 fetch 只是刷新(防 checkout 与本步之间有新 push),逐条独立且失败不阻断:
+      #    合成一条多 refspec 的 fetch 是全有全无——只要 test 分支还不存在就整体 128 退出、
+      #    一条都不拉,被 || true 吞掉后看不出来。
+      - name: Validate deploy source
+        run: |
+          set -euo pipefail
+          for ref in main dev test; do
+            git fetch --no-tags --quiet origin "+refs/heads/${ref}:refs/remotes/origin/${ref}" || true
+          done
+          git fetch --no-tags --quiet origin '+refs/heads/release/*:refs/remotes/origin/release/*' || true
+
+          SHA="$(git rev-parse HEAD)"
+          case "${{ inputs.environment }}" in
+            production) ALLOWED="$(git for-each-ref --format='%(refname)' 'refs/remotes/origin/release/*')"; WANT="release/*" ;;
+            stage)      ALLOWED="refs/remotes/origin/main"; WANT="main" ;;
+            develop)    ALLOWED="refs/remotes/origin/test refs/remotes/origin/dev"; WANT="test 或 dev" ;;
+            *) echo "未知 environment: ${{ inputs.environment }}" >&2; exit 1 ;;
+          esac
+
+          for ref in $ALLOWED; do
+            if git merge-base --is-ancestor "$SHA" "$ref" 2>/dev/null; then
+              echo "✔ 部署源合法:$SHA 可从 ${ref#refs/remotes/} 达到"
+              exit 0
+            fi
+          done
+
+          echo "❌ ${{ inputs.environment }} 只能从 ${WANT} 部署,而 ref='${{ inputs.ref }}' 解析出的" >&2
+          echo "   $SHA 不在其中任何一条上。" >&2
+          echo "   (prod 上线请先从 origin/main 切 release/YYYY-MM-DD,再用它 dispatch。)" >&2
+          exit 1
+
+      # 控制面脚本必须取自**本 workflow 自己的版本**，不是被部署的那个 ref。
+      # 上面的 Checkout 检出的是 inputs.ref（develop 走合成的 test 分支、prod 走
+      # release/*、回滚走更老的 SHA）——那些 ref 上可能根本没有 render_env.sh，
+      # 或者是它的旧版本。用旧版控制面去解析新目标，结果是部到错的项目上。
+      - name: Checkout control-plane helpers (workflow revision)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: .control-plane
+          sparse-checkout: deploy/render_env.sh
+          sparse-checkout-cone-mode: false
+
+      # 把 project / 集群 / 镜像仓库按目标解析进 $GITHUB_ENV。
+      # 未知目标在这里就地失败，绝不让它带着空 PROJECT_ID 跑到 auth 与 push。
+      - name: Resolve deployment target
+        env:
+          GCP_TARGET: ${{ inputs.gcp_target }}
+        run: bash .control-plane/deploy/render_env.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: GCP auth
+        uses: ./.github/actions/gcp-auth
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+          artifact_registry_region: ${{ env.ARTIFACT_REGISTRY_REGION }}
+
+      - name: Determine image tag
+        id: image_tag
+        run: |
+          BRANCH_SAFE="${GITHUB_REF_NAME//\//-}"
+          SHA_SHORT=$(git rev-parse --short=7 HEAD)
+          IMAGE_REPO="${ARTIFACT_REGISTRY_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY_NAME}/${SERVICE}-${{ inputs.environment }}"
+          echo "image-tag=${IMAGE_REPO}:${BRANCH_SAFE}-${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "branch-tag=${IMAGE_REPO}:${BRANCH_SAFE}" >> $GITHUB_OUTPUT
+          echo "cache-image=${IMAGE_REPO}:buildcache" >> $GITHUB_OUTPUT
+          echo "cache-scope=${SERVICE}-${{ inputs.environment }}-build" >> $GITHUB_OUTPUT
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./deploy/dockerfile
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          build-args: |
+            NEXT_PUBLIC_BASE_PATH=/game
+            NEXT_PUBLIC_PGC_BASE_URL=${{ inputs.public_pgc_base_url }}
+            NEXT_PUBLIC_APP_ENV=${{ inputs.environment }}
+          tags: |
+            ${{ steps.image_tag.outputs.image-tag }}
+            ${{ steps.image_tag.outputs.branch-tag }}
+          cache-from: |
+            type=gha,scope=${{ steps.image_tag.outputs.cache-scope }}
+            type=registry,ref=${{ steps.image_tag.outputs.cache-image }}
+          cache-to: |
+            type=gha,mode=max,scope=${{ steps.image_tag.outputs.cache-scope }}
+            type=registry,ref=${{ steps.image_tag.outputs.cache-image }},mode=max
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ env.CLUSTER_NAME }}
+          location: ${{ env.REGION }}
+
+      - name: Create namespace if missing
+        run: |
+          # namespace 由运维预建；本身份只在该 ns 内有权限，没有集群级 namespace 权限。
+          NS="${{ inputs.namespace }}"
+          if kubectl get serviceaccounts -n "$NS" >/dev/null 2>&1; then
+            echo "namespace $NS reachable"
+          else
+            echo "::error::namespace $NS 不存在或无权限访问。"
+            exit 1
+          fi
+
+      - name: Deploy manifests
+        env:
+          IMAGE_TAG: ${{ steps.image_tag.outputs.image-tag }}
+        run: |
+          export ENVIRONMENT="${{ inputs.environment }}"
+          export NAMESPACE="${{ inputs.namespace }}"
+          export IMAGE_TAG
+          export APP_RUNTIME_ENV="${{ inputs.app_env }}"
+          export HPA_MIN_REPLICAS="${{ inputs.hpa_min }}"
+          export HPA_MAX_REPLICAS="${{ inputs.hpa_max }}"
+          export APP_CPU_REQUEST="${{ inputs.app_cpu_request }}"
+          export APP_MEM_REQUEST="${{ inputs.app_mem_request }}"
+          export APP_CPU_LIMIT="${{ inputs.app_cpu_limit }}"
+          export APP_MEM_LIMIT="${{ inputs.app_mem_limit }}"
+          export PGC_BASE_URL="${{ inputs.pgc_base_url }}"
+          export GITHUB_SHA="${{ github.sha }}"
+          export DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Datadog APM 灰度：dev 先行。develop 注入 ESM preload + 开 tracer；
+          # 其余环境留空 = 不接 tracer（prod 零变更），待 dev 验收后再晋级。
+          if [ "${{ inputs.environment }}" = "develop" ]; then
+            export DD_NODE_OPTIONS="--import dd-trace/initialize.mjs"
+            export DD_TRACE_ENABLED="true"
+          else
+            export DD_NODE_OPTIONS=""
+            export DD_TRACE_ENABLED="false"
+          fi
+          envsubst < deploy/k8s-deployment.yaml | kubectl apply -f -
+          envsubst < deploy/hpa.yaml | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${SERVICE}-${{ inputs.environment }} \
+            --namespace=${{ inputs.namespace }} --timeout=300s
+
+      - name: Status
+        if: always()
+        run: |
+          # 必须是 inputs.namespace:environment(develop/stage/production)是 taluna 老栈的 ns 名,
+          # 拿它查会命中别人的资源或被 RBAC 拒(且 || true 会把拒绝吞掉,看不出本次部署的真实状态)。
+          NS="${{ inputs.namespace }}"
+          kubectl get deploy,svc,hpa -n "$NS" || true
+
+  notify:
+    needs: [build-push-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    env:
+      NOTIFY_WEBHOOK: ${{ secrets.LARK_WEBHOOK_URL }}
+    steps:
+      # 直接 curl 到 Lark 自定义机器人 webhook，不依赖第三方 action（规避 Node 版本弃用）。
+      - name: Notify Lark
+        if: env.NOTIFY_WEBHOOK != ''
+        env:
+          RESULT: ${{ needs.build-push-deploy.result }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          SHA: ${{ github.sha }}
+          IMAGE: ${{ needs.build-push-deploy.outputs.image-tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$RESULT" = "success" ]; then
+            TEXT=$(printf '✅ rezonalab-game-web / %s 部署成功\n提交: %s\n镜像: %s' "$ENVIRONMENT" "$SHA" "$IMAGE")
+          else
+            TEXT=$(printf '❌ rezonalab-game-web / %s 部署失败 (%s)\n提交: %s\n详情: %s' "$ENVIRONMENT" "$RESULT" "$SHA" "$RUN_URL")
+          fi
+          jq -n --arg t "$TEXT" '{msg_type:"text",content:{text:$t}}' \
+            | curl -sS -X POST "$NOTIFY_WEBHOOK" -H 'Content-Type: application/json' -d @-

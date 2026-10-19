@@ -1,0 +1,175 @@
+# develop 环境的叠合部署（对齐 go-rezona 的 deploy_test.yml）：
+# 机器分支 `test` = `dev` + **全部**带 `deploy-for-testing` 标签的 open PR，逐个 --no-ff 叠合后
+# force-push；develop 只部署 `test`。推 dev / 打摘标签 / 带标签 PR 推新提交 / 关 PR 都重叠一遍。
+#
+# 为什么是叠合而不是覆盖：原先打标签就把该 PR head 整个顶上 develop，别人正在验的东西被顶掉
+# 且收不到任何通知（本仓 LARK_WEBHOOK_URL 未配置）。叠合后多人可同时占 develop。
+# 无标签 PR 时 `test` 与 `dev` 同 SHA，退化成原来的行为。
+#
+# 冲突处理：`git merge --abort` + 在冲突 PR 上留评论 + **整次跳过部署**（develop 保持上一版）。
+# 两条处置策略见 docs/deploy/cicd-onboarding.md §5.3。
+#
+# 环境参数须与 deploy_dev.yml 逐项一致，由 tests/deploy/deploy-for-testing-contract.test.ts 守护。
+name: Deploy (develop, test 叠合)
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+  push:
+    branches: [dev]
+
+# 与 deploy_dev.yml 同组（concurrency 组是仓库级、跨 workflow 生效）：
+# 叠合部署与手动 dispatch 串行排队，不互踩。
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false
+
+jobs:
+  # 合成 test 分支。PR 事件里只有「与标签相关」的才重叠，否则任何 PR 推一次提交都要重跑一遍。
+  # fork PR 也要挡在 job 之外，不能只在收集步骤里过滤：`pull_request` 来自 fork 时
+  # GITHUB_TOKEN 恒为只读（`permissions:` 只能收窄不能放宽），后面的 force-push 会 403，
+  # 结果是叠合链整条红一次、develop 不更新、PR 侧还没有任何提示。
+  compose-test:
+    if: >-
+      github.event_name == 'push' ||
+      ((github.event.pull_request.head.repo.full_name == github.repository) &&
+       (contains(github.event.pull_request.labels.*.name, 'deploy-for-testing') ||
+        (github.event.action == 'unlabeled' && github.event.label.name == 'deploy-for-testing')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # force-push 机器分支 test
+      pull-requests: write   # 冲突时在 PR 上留评论
+    outputs:
+      sha: ${{ steps.compose.outputs.sha }}
+      status: ${{ steps.compose.outputs.status }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      # 列出所有带标签的 open PR。fork 的 PR 一律排除：拿不到 secrets，也不该上共享环境。
+      - name: Collect labeled PRs
+        id: collect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const label = 'deploy-for-testing';
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100,
+            });
+            const labeled = prs.filter((pr) => pr.labels?.some((l) => l.name === label));
+            const forks = labeled.filter((pr) => pr.head.repo?.full_name !== context.repo.owner + '/' + context.repo.repo);
+            for (const pr of forks) core.warning(`PR #${pr.number} 来自 fork，跳过叠合（fork 不上共享环境）`);
+            // 🔴 按 PR 号**升序**叠合，不能用 pulls.list 的默认序（实测返回「新的在前」）。
+            // 冲突时被中止、被留言的是**迭代到的那一个**，所以顺序决定谁背锅：默认序下
+            // 新 PR 先叠进去、老 PR 反而被判冲突（2026-08-27 实测 [14,13]，造成冲突的 #14
+            // 顺利叠入、无辜的 #13 收到告警），与 §5.3「等前面的 PR 合入 dev、后提交的解冲突」
+            // 正好相反。升序后：先来的先占，后开的 PR 让路——与文档口径一致。
+            // 顺带保证同一批 PR 每次合成出同样的历史，不随 API 返回序漂移。
+            const numbers = labeled
+              .filter((pr) => !forks.includes(pr))
+              .map((pr) => pr.number)
+              .sort((a, b) => a - b);
+            core.info(`带 '${label}' 标签的同仓 PR：${numbers.join(', ') || '（无）'}`);
+            core.setOutput('numbers', numbers.join(' '));
+
+      - name: Compose test branch
+        id: compose
+        env:
+          PR_NUMBERS: ${{ steps.collect.outputs.numbers }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B compose-test origin/dev
+
+          MERGED=""
+          for pr in ${PR_NUMBERS}; do
+            git fetch --no-tags origin "pull/${pr}/head:pr-${pr}"
+            echo "叠合 PR #${pr}"
+            if ! git merge --no-ff --no-edit -m "merge: pr-${pr} 叠合到 test" "pr-${pr}"; then
+              # 先写输出再 abort：merge 若因非冲突原因失败（unrelated histories 等）此时无
+              # MERGE_HEAD，`git merge --abort` 会以 128 退出，在 set -e 下当场中止脚本——
+              # 输出没写成，后面的「在 PR 上留评论」步骤就被跳过，冲突变成一次无人知晓的静默失败。
+              echo "conflict_pr=${pr}" >> "$GITHUB_OUTPUT"
+              echo "conflict_with=${MERGED:-（仅与 dev 基线冲突）}" >> "$GITHUB_OUTPUT"
+              echo "status=conflict" >> "$GITHUB_OUTPUT"
+              git merge --abort || true
+              echo "❌ PR #${pr} 与 dev + 已叠合的 [${MERGED:-无}] 冲突，本次不部署（develop 保持上一版）" >&2
+              exit 0
+            fi
+            MERGED="${MERGED:+${MERGED} }#${pr}"
+          done
+
+          SHA="$(git rev-parse HEAD)"
+          # force-push：test 是机器分支，每次都是重新合成的一条新历史，不快进
+          git push --force origin "compose-test:test"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "✔ test = dev + [${PR_NUMBERS:-无}] → ${SHA}"
+
+      # 不留痕就等于没人知道 develop 停在旧版——本仓没有 Lark 通知，只能写回 PR。
+      - name: Comment on conflicting PR
+        if: steps.compose.outputs.status == 'conflict'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.compose.outputs.conflict_pr }}');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr,
+              body: [
+                '⚠️ **叠合部署中止**：本 PR 与 `dev` 基线或已叠合的 ' +
+                  '${{ steps.compose.outputs.conflict_with }} 冲突，',
+                'develop 环境保持上一版未更新。',
+                '',
+                '两条处置策略（见 `docs/deploy/cicd-onboarding.md` §5.3）：',
+                '1. 把 `origin/dev` 合进本分支解决冲突后重推 —— 推送会自动重新叠合；',
+                '2. 急着验的话，摘掉冲突对方 PR 的 `deploy-for-testing` 标签，让本 PR 先上。',
+              ].join('\n'),
+            });
+
+  # 部署目标由运维变量 `WEB_DEPLOY_TARGETS`（逗号分隔）决定，不是代码常量。
+  # 未配置时解析为单目标 `rezonaai` —— 与迁移前逐字一致的行为。
+  targets:
+    needs: [compose-test]
+    if: needs.compose-test.outputs.status == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.resolve.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: deploy/deploy_targets.sh
+          sparse-checkout-cone-mode: false
+      - id: resolve
+        env:
+          TARGETS: ${{ vars.WEB_DEPLOY_TARGETS }}
+        run: bash deploy/deploy_targets.sh
+
+  deploy:
+    needs: [compose-test, targets]
+    if: needs.compose-test.outputs.status == 'success'
+    # fail-fast: false —— 一条腿失败**不取消**另一条在途的腿。本仓每条腿自成闭环
+    # （构建 → apply → rollout status 都在 _deploy.yml 内部），所以矩阵红了也不会
+    # 让另一个项目少做任何事；需要防的只是「互相取消」。
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      gcp_target: ${{ matrix.target.gcp_target }}
+      environment: develop
+      namespace: rezonalab-game-dev
+      app_env: production
+      hpa_min: "2"
+      hpa_max: "5"
+      app_cpu_request: "500m"
+      app_mem_request: "1Gi"
+      app_cpu_limit: "4"
+      app_mem_limit: "8Gi"
+      pgc_base_url: https://devlab.rezona.ai
+      public_pgc_base_url: https://devlab.rezona.ai
+      ref: ${{ needs.compose-test.outputs.sha }}

@@ -1,0 +1,71 @@
+# CI：install + lint + 类型检查 + 测试 + 构建。纯检查，不碰云、不部署。
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # 分支策略闸：谁能合进谁（口径见 specs/2026-08-27-merge-strategy-alignment-design.md §5.5 ①）。
+  # 与 quality 并列、互不 needs —— 分支名写错不该挡住测试结果，两个信号各看各的。
+  # ⚠️ 它是 main / release/* 的 required check 之一（与 quality 并列）——不进 required 的话
+  #    分支名合错只是个红叉、`gh pr merge` 照样能合。「required check 对直推也生效」那条只
+  #    约束 dev（靠直推推进，见 rezonalab-dev-bringup.md §7），main/release 本就只走 PR。
+  #    本 job 在 PR 事件上恒运行，不会因 skip 把 PR 卡死。
+  branch-policy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Check branch policy
+        run: pnpm exec tsx scripts/branch-policy/index.ts
+
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11   # 当前 latest（仓库 pnpm-workspace.yaml 用了 allowBuilds，需 pnpm 10+）
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

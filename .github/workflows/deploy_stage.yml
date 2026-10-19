@@ -1,0 +1,58 @@
+# 预发部署：手动触发，部署源默认 main（对齐 koubou lab-stage 口径）。复用 _deploy.yml 流水线。
+# stage 跑的是 main tip —— 它是 prod 前的验证位，切 release 分支之前先在这里过一遍。
+# 填别的分支会被 _deploy.yml 的 Validate deploy source 拦下（stage 只认 main）。
+name: Deploy (stage)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 要部署的分支（默认 main；stage 只接受 main 上的 commit）
+        default: main
+        type: string
+
+concurrency:
+  group: deploy-stage
+  cancel-in-progress: false
+
+jobs:
+  # 部署目标由运维变量 `WEB_DEPLOY_TARGETS`（逗号分隔）决定，不是代码常量。
+  # 未配置时解析为单目标 `rezonaai` —— 与迁移前逐字一致的行为。
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.resolve.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: deploy/deploy_targets.sh
+          sparse-checkout-cone-mode: false
+      - id: resolve
+        env:
+          TARGETS: ${{ vars.WEB_DEPLOY_TARGETS }}
+        run: bash deploy/deploy_targets.sh
+
+  deploy:
+    needs: [targets]
+    # fail-fast: false —— 一条腿失败**不取消**另一条在途的腿。本仓每条腿自成闭环
+    # （构建 → apply → rollout status 都在 _deploy.yml 内部），所以矩阵红了也不会
+    # 让另一个项目少做任何事；需要防的只是「互相取消」。
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      gcp_target: ${{ matrix.target.gcp_target }}
+      environment: stage
+      namespace: rezonalab-game-stage
+      app_env: production
+      hpa_min: "2"
+      hpa_max: "5"
+      # stage canonical 域名：经共享 rezona-lab-stage-urlmap 按 path 分流（/game→前端、
+      # /game/pgcserver→pgc、/game/koubou→koubou）。BFF 服务端代理与构建期 NEXT_PUBLIC_*
+      # 都用此基址（与 dev 同构，仅域名 devlab→stalab）。
+      pgc_base_url: "https://stalab.rezona.ai"
+      public_pgc_base_url: "https://stalab.rezona.ai"
+      ref: ${{ inputs.branch }}

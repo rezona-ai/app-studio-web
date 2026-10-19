@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>picker demo · 纯 canvas 小游戏</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  canvas#game { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="game" width="564" height="1038"></canvas>
+<script src="./picker-sdk.js"></script>
+<script>
+// 模拟 agent 生成的纯 canvas 游戏:背景 + 来回移动的角色 + 静态按钮。
+// 点击 canvas(非编辑模式)让角色跳一下,验证编辑模式下游戏交互被 overlay 拦截。
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+
+const hero = { x: 100, y: 700, w: 80, h: 80, vx: 2.5, jump: 0 };
+const button = { x: 182, y: 920, w: 200, h: 64 };
+const sky = { x: 0, y: 0, w: cv.width, h: 600 };
+
+cv.addEventListener('click', () => { if (hero.jump <= 0) hero.jump = 1; });
+
+function draw() {
+  // 背景
+  const g = ctx.createLinearGradient(0, 0, 0, sky.h);
+  g.addColorStop(0, '#1c2b4a'); g.addColorStop(1, '#3a5b8c');
+  ctx.fillStyle = g; ctx.fillRect(sky.x, sky.y, sky.w, sky.h);
+  ctx.fillStyle = '#2d4022'; ctx.fillRect(0, 600, cv.width, cv.height - 600);
+
+  // 角色:左右巡逻,可跳
+  hero.x += hero.vx;
+  if (hero.x < 0 || hero.x + hero.w > cv.width) hero.vx *= -1;
+  if (hero.jump > 0) hero.jump = Math.max(0, hero.jump - 0.04);
+  const hy = hero.y - Math.sin(hero.jump * Math.PI) * 120;
+  ctx.fillStyle = '#e8b04a';
+  ctx.fillRect(hero.x, hy, hero.w, hero.h);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(hero.x + (hero.vx > 0 ? 52 : 12), hy + 20, 16, 16); // 眼睛
+
+  // 按钮
+  ctx.fillStyle = '#4f8cff';
+  ctx.beginPath(); ctx.roundRect(button.x, button.y, button.w, button.h, 12); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('START', button.x + button.w / 2, button.y + 41);
+  ctx.textAlign = 'left';
+
+  requestAnimationFrame(draw);
+}
+draw();
+
+// ---- 向 picker SDK 注册可选实体(角色是运动的,getBounds 每次实时取值) ----
+RezonaLabPicker.register({
+  id: 'hero', name: '主角', assetKey: 'hero.png', codeRef: 'game.js#hero',
+  getBounds: () => ({ x: hero.x, y: hero.y - Math.sin(hero.jump * Math.PI) * 120, w: hero.w, h: hero.h }),
+});
+RezonaLabPicker.register({
+  id: 'start-button', name: '开始按钮', codeRef: 'game.js#button',
+  getBounds: () => ({ ...button }),
+});
+RezonaLabPicker.register({
+  id: 'sky', name: '天空背景', assetKey: 'sky.png', codeRef: 'game.js#sky',
+  getBounds: () => ({ ...sky }),
+});
+</script>
+</body>
+</html>

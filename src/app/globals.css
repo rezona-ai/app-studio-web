@@ -1,0 +1,1126 @@
+@import "tailwindcss";
+
+/* 排除全仓 markdown 文档不被 Tailwind v4 自动内容扫描:
+   文档里举例的字面 arbitrary class(如 `bg-[var(...)]`/`Error(...)`)会被扫成
+   非法 CSS 规则,导致整个 globals.css 解析失败、页面 500。
+   运行时真正用到的 class 必然也出现在 .tsx 源码中,排除 md 零副作用。
+   路径相对本样式表(src/app/),../../ 即仓库根。 */
+@source not "../../**/*.md";
+@source not "../../**/*.mdx";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* 等宽:入口页余额数字「2,847」与账户「EN」(IBM Plex Mono,见 src/app/fonts.ts) */
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* 文字 */
+  --color-ink: #121212;
+  --color-muted: #7b7b7b;
+
+  /* 表面 / 填充 */
+  --color-surface: #fcfcfc;
+  --color-surface-2: #f8f7f7;
+  --color-fill: #f1f1f1;
+  --color-canvas: #f8f7f7;
+  /* 面板根底(Chat 左栏 / Preview 右栏根 / 页面底):浅色稿贴合 canvas 底,深色稿单独覆盖为 #171717 */
+  --color-shell: #f8f7f7;
+  /* 下拉 / 弹层浮面:浅色稿与 surface 同色,深色稿亦与 surface 同色(见 dark 覆盖) */
+  --color-pop: #fcfcfc;
+
+  /* 描边 */
+  --color-line: #ececec;
+  --color-line-2: #e2e2e2;
+  /* 更清晰的描边(画布搜索条等需要明确边界的浮动控件):Figma grey/400 #494949 的明色对位,沿用 --shadow-btn 描边环灰 */
+  --color-line-strong: #d4d4d4;
+
+  /* 强调 */
+  --color-live: #49ba61;
+  /* 品牌橙(Figma primary/main #F97316)= 项目强调色:新 UI 选中/进度/高亮一律用它(恒定不随主题翻) */
+  --color-primary: #f97316;
+  --color-on-primary: #171717; /* 品牌橙徽章上的固定深色文字(不随主题翻;橙底配深字比配白字对比度更高) */
+  /* 品牌橙**大按钮**上的白字(设计稿 5952:84375 / 6180:109915 的全宽 CTA 与 Recharge Now)。
+     与上一条并存而不是取代它:小字号徽章仍用深字对比更高,大字号 CTA 按稿用白字。 */
+  --color-on-primary-strong: #ffffff;
+  /* 品牌橙键帽 CTA(设计稿 8905:73087 Post to Rezona):纵向橙渐变 + 4px 硬底沿。
+     与 --color-primary 并存而非取代:平铺橙用 --color-primary,稿上带立体底沿的大 CTA 用这三个值。
+     同 .btn-raised / --upsell-* 的既有例外——品牌橙恒定不随主题翻,[data-theme="dark"] 不覆盖。 */
+  --cta-brand-from: #fb923c;
+  --cta-brand-to: #ff8029;
+  --cta-brand-edge: #7c2d12;
+  /* 宝箱系 hero(5952:84376 积分不足 / 8047:165129 低余额)专属:
+     底色渐变的低余额端为黄(稿上积分不足端复用 --color-promo,两者刻意不同色),
+     字标描边为深棕 —— get_design_context 不输出文字描边,该值按两张稿的截图目视取。 */
+  --hero-tint-low: #ffd630;
+  --hero-stroke-chest: #4a1d08;
+  /* file/code 浏览器 chrome(Figma 647-24650,暗色专用、不随主题翻;语法色见 highlight.ts) */
+  --color-code-tree: #0a0a0a;
+  --color-code-input: #000000;
+  --color-code-text: #a1a1aa;
+  --color-code-text-dim: #52525b;
+  --color-code-line: rgba(255, 255, 255, 0.1);
+  --color-code-hover: rgba(255, 255, 255, 0.05);
+  --color-code-sel: #f9731614;
+  --color-primary-soft: #f9731633;
+  /* 完整订阅弹窗的主推档 CTA(设计稿 8372:178750 的亮黄实底):恒定不随主题翻,同品牌橙策略。
+     ⚠️ 该填充在 Figma 里未绑变量、get_design_context 取不到,当前值按设计稿目视取,待设计确认后校准。 */
+  --color-cta-highlight: #dcfb4b;
+  --color-on-cta-highlight: #171717; /* 亮黄底上的固定深色文字(不可用会翻转的 --color-ink) */
+  /* 品牌橙 20% 柔光:连线 / 聚焦光环 / 加号底色(原 accent 蓝已全量迁移到 primary) */
+
+  /* 错误 / 危险:Toast 错误态、破坏性动作语义色 */
+  --color-danger: #e5484d;
+  --color-warning: #ffab00; /* 工具/思考进行中 amber 转圈,对齐 Figma warning/main;明暗同色皆可读 */
+  /* danger 的低透明柔光:状态点光环 / 错误底纹 */
+  --color-danger-soft: #e5484d1f;
+  /* danger 气泡**内部**的次级面(原文 pre / 图标按钮 hover):比气泡底再压一层同色红。
+     不能用中性的 --color-fill —— 那块灰落在红气泡里是块异色补丁,配色直接断层。 */
+  --color-danger-fill: #e5484d1f;
+
+  /* 模态遮罩:40% 黑,明暗主题同值(压暗底层内容,不随主题翻);替代散落的 bg-black/40 硬编码 */
+  --color-scrim: rgba(0, 0, 0, 0.4);
+
+  /* Toast 三型状态色(恒浅色 toast 专用,不随主题翻转;对齐 Figma 955-49756/49849/43601) */
+  --color-toast-error: #ff5630;
+  --color-toast-success: #22c55e;
+  --color-toast-warning: #ffab00;
+
+  /* 充值弹窗(Figma 6180:109915):促销粉恒定不随主题翻(仅 SAVE chip,上面文字恒白;
+     倒计时 chip 新稿改为品牌橙底,不再用粉);券横幅底新稿为中性灰,深色稿覆盖(见 [data-theme="dark"]) */
+  --color-promo: #fe3466;
+  --color-promo-banner: #f1f1f1;
+
+  /* 资产类型色(画布节点保留) */
+  --color-image: #6c8cff;
+  --color-video: #ff8a4c;
+  --color-audio: #28c2a8;
+  --color-3d: #a06bff;
+  --color-text: #f2c64b;
+
+  /* 3D 空间指示器的三轴(spec 2026-08-20-axis-gizmo-and-estimate-chip)。
+     取**行业约定**的 RGB↔XYZ(Blender / Unity / Maya 一律如此)—— 换成品牌橙系会让熟 3D 的
+     用户读错轴。浅色稿在白/浅底上要压得住,故三色都比纯 RGB 略深。
+     负轴不另立令牌,复用 --color-line。 */
+  --color-axis-x: #d93a34;
+  --color-axis-y: #1f9d4d;
+  --color-axis-z: #2f6fdb;
+
+  /* 素材库弹窗(Creative Library)专属令牌:深色值为设计稿原稿(liblib 风格),
+     浅色值按同一语义在浅底上推导;--lib-accent 橙色恒定不随主题翻(同 --color-primary 策略) */
+  --lib-pop: #ffffff;                       /* 弹窗底 */
+  --lib-line: #e8e8e8;                      /* 弹窗描边 */
+  --lib-ink: #171717;                       /* 主文字/选中 tab 字 */
+  --lib-muted: #737373;                     /* 副文字/未选 tab 字 */
+  --lib-fill: #f1f1f1;                      /* 搜索框底/缩略图底 */
+  --lib-chip-line: rgba(0, 0, 0, 0.12);     /* tab 胶囊描边 */
+  --lib-chip-active: rgba(0, 0, 0, 0.06);   /* 选中 tab 底 */
+  --lib-input-line: #d4d4d4;                /* 搜索框描边 */
+  --lib-placeholder: #a3a3a3;               /* 搜索 placeholder */
+  --lib-accent: #f97316;                    /* Use 按钮/hover 描边(同品牌橙 --color-primary) */
+  --shadow-lib: 0px 10px 21px 0px rgba(0, 0, 0, 0.07), 0px 38px 38px 0px rgba(0, 0, 0, 0.06),
+    0px 86px 52px 0px rgba(0, 0, 0, 0.04), 0px 153px 61px 0px rgba(0, 0, 0, 0.01);  /* Depth/Popover */
+
+  /* 完整订阅弹窗(all-plans,设计稿 9433:70184)专属令牌:该弹窗是**恒定暗色促销面**,
+     不随 data-theme 翻(同 .btn-raised 恒浅色 CTA 的既有例外),故这里全是暗稿原值、
+     [data-theme="dark"] 不再覆盖。组件里只许引用这些名字,不许再出现字面色值。 */
+  --upsell-surface: #171717;                       /* 弹窗底 */
+  --upsell-line: rgba(255, 255, 255, 0.5);         /* 弹窗 0.5px 描边 */
+  --upsell-scrim: rgba(0, 0, 0, 0.8);              /* 遮罩(比通用 --color-scrim 更暗,稿上如此) */
+  --upsell-card: #18191c;                          /* 卡面基底(creator/master) */
+  --upsell-card-starter-from: #1d1f20;             /* starter 卡面纵向渐变两端 */
+  --upsell-card-starter-to: #17191b;
+  --upsell-sheen: rgba(255, 255, 255, 0.15);       /* 卡面顶部高光起点(收到全透明) */
+  --upsell-panel: rgba(255, 255, 255, 0.05);       /* 积分面板底 / chip 描边 */
+  --upsell-glow-creator: #d1fe17;                  /* creator 卡左上柠檬绿光晕 + CTA 填充 */
+  --upsell-glow-creator-lift: #ffff14;             /* creator CTA 底部渐亮端 */
+  --upsell-key-creator-edge: #829b19;              /* creator 键帽底沿 */
+  --upsell-promo: #ff005b;                         /* master 卡光晕 / OFF 徽标 / 划线斜杠(稿上比 --color-promo 更艳) */
+  --upsell-cta-master: #ff9d00;                    /* master CTA 填充(稿上比品牌橙更黄) */
+  --upsell-cta-ink: #131517;                       /* 三档 CTA 上的固定深色字(不可用会翻转的 --color-ink) */
+  --upsell-text: #ffffff;                          /* 卡内主文字 */
+  --upsell-text-2: #e5e5e5;                        /* 说明行 */
+  --upsell-text-muted: rgba(255, 255, 255, 0.5);   /* 卖点 / 等价行 / 价格后缀 */
+  --upsell-perk-hi: #9ce6f3;                       /* 权益首行(积分那条)高亮青 */
+  --upsell-badge-blue-from: #20caf9;               /* RECOMMENDED / BEST VALUE 徽标蓝渐变 */
+  --upsell-badge-blue-to: #3042f0;
+  --upsell-hero-glow: #fb923c;                     /* hero 内发光 + 底色渐变起点 */
+  /* 模型锁定弹窗(无 hero 单档卡)专用:取自主站 paywall 同一份稿面色(PAYWALL_C.ctaFill / ctaShadow)。
+     橙 CTA 两端比品牌橙更亮,底沿是深棕实色键帽 —— 与三档窗的三套键帽不同档,故单列。 */
+  --upsell-cta-orange-from: #fb923c;
+  --upsell-cta-orange-to: #ff8029;
+  --upsell-key-orange-edge: #7c2d12;
+
+  /* 圆角 */
+  --radius-card: 12px;
+  --radius-control: 8px;
+}
+
+/* Sekuya 字体(字标/大标题/Popular games):next/font 加载,仅 weight 400(展示字体本身已够粗,不可合成加粗) */
+:root {
+  --font-sekuya: var(--font-sekuya-loaded), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+.font-display {
+  font-family: var(--font-sekuya);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+}
+
+:root {
+  /* 与 Figma effect 精确对齐 */
+  --shadow-toolbar: 0 8px 16px -12px rgba(0, 0, 0, 0.13), 0 1px 4px -4px rgba(0, 0, 0, 0.08);
+  --shadow-prompt: 0 18px 24px -20px rgba(0, 0, 0, 0.13), 0 8px 16px -12px rgba(0, 0, 0, 0.08), inset 0 2px 0 0 #fff;
+  /* 控件胶囊(模型选择器 / 生成参数 pill)内高光:浅色稿白色高光,深色稿改用低透明白(见 dark 覆盖,避免过亮) */
+  --shadow-pill: inset 0 0 2px 0 #fff;
+  --shadow-btn: 0 3px 4px -1px rgba(0, 0, 0, 0.15), 0 0 0 1px #d4d4d4, inset 0 1px 0 0 rgba(255, 255, 255, 0.33);
+  --shadow-shortcut: 0 0 0 1px rgba(0, 0, 0, 0.11), 0 1px 4.2px -1px rgba(0, 0, 0, 0.25),
+    inset 0 2px 0.8px 0 rgba(255, 255, 255, 0.27), inset 0 -1px 0.6px 0 rgba(0, 0, 0, 0.2);
+  /* Depth/Popover:多层柔和落影(下拉菜单/弹层) */
+  --shadow-popover: 0 10px 21px 0 rgba(0, 0, 0, 0.07), 0 38px 38px 0 rgba(0, 0, 0, 0.06),
+    0 86px 52px 0 rgba(0, 0, 0, 0.04), 0 153px 61px 0 rgba(0, 0, 0, 0.01);
+  /* 画布资产卡片:柔和投影 + 发丝描边 */
+  --shadow-card: 0 6px 16px -8px rgba(0, 0, 0, 0.12), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+  /* 画布节点的**选中**落影(品牌橙柔投):卡片(`NodeCard`)与组卡(`GroupNode`)共用一份 ——
+     组卡升格后两者的选中语言必须一致(spec 2026-08-19-group-card-selection-polish 问题 4),
+     而这个值原先是手写在 NodeCard 的 class 里的字面量,照抄一份到框上迟早漂移,故收成令牌 */
+  --shadow-node-selected: 0 4px 14px -6px color-mix(in srgb, var(--color-primary) 40%, transparent);
+
+  /* 折叠把手的抬升。**clipPath 元素的 box-shadow / border 会被一并裁掉**(阴影落在裁剪区外,
+     边框也不会沿曲边走),故只能走 filter: drop-shadow —— 它作用于裁剪后的渲染结果,能贴着轮廓投影。
+     **drop-shadow 没有 spread**,想要 `0 0 0 1px` 那种实发丝只能靠四个方向各叠一层 0 模糊偏移。
+     透明度是关键且试错过三轮:0.6px 单层柔光晕 → 开关对照看不出差别;发丝给到 0.42 → 一条生硬的
+     白线,被判"突兀";末了定在 **0.16**,与 --shadow-popover 的 0.12 同一档 —— 深色稿分层本来
+     就靠这种极淡发丝,加粗加亮反而出戏。末层是落影。把手底色是 --color-pop,与画布底、与卡片都相近,不抬起来在「压着卡片」和
+     「对话栏收起后贴视口左缘」这两种情形下几乎看不见(缺乏引导) */
+  --elev-edge-handle: drop-shadow(1px 0 0 rgba(0, 0, 0, 0.12)) drop-shadow(-1px 0 0 rgba(0, 0, 0, 0.12))
+    drop-shadow(0 1px 0 rgba(0, 0, 0, 0.12)) drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.12))
+    drop-shadow(0 4px 10px rgba(0, 0, 0, 0.2));
+  /* 充值弹窗三组品牌色内发光(设计稿 6180:109915,橙系恒定不随主题翻):余额卡 / 选中档位卡 / 倒计时 chip。
+     三档都是品牌橙 #f97316(HSL 25/95%/53%)沿明度轴取的暗/亮版,只改 L 不动色相与饱和度:
+     余额卡 L33% #a44704(最沉)· 选中卡 L40% #c75605 · 倒计时 chip L79% #fcc197(橙底上的亮高光) */
+  --shadow-topup-balance: inset 0 8px 32px 0 rgba(164, 71, 4, 0.25), inset 0 -16px 48px 0 rgba(164, 71, 4, 0.35),
+    inset 0 -8px 16px 0 rgba(164, 71, 4, 0.45);
+  --shadow-topup-select: inset 0 8px 24px 0 rgba(199, 86, 5, 0.25), inset 0 -16px 32px 0 rgba(199, 86, 5, 0.35),
+    inset 0 -8px 8px 0 rgba(199, 86, 5, 0.45);
+  --shadow-topup-timer: inset 0 4px 12px 0 rgba(252, 193, 151, 0.25), inset 0 -8px 16px 0 rgba(252, 193, 151, 0.35),
+    inset 0 -4px 4px 0 rgba(252, 193, 151, 0.45);
+  --grad-btn: linear-gradient(to bottom, #e5e5e5, #e2e2e2);
+  /* 骨架屏微光高光色:需与 --color-fill 拉开明度差,动画才肉眼可见 */
+  --color-skeleton-hi: #e2e2e2;
+  /* 入口页游戏卡片底色:两行不同底色 */
+  --color-card-1: #e6e6e6;
+  --color-card-2: #ececec;
+}
+
+/* 深色主题:覆盖语义变量(来源 Figma 164-4350)。
+   raised 按钮体系(--grad-btn/--shadow-btn/.btn-raised)在暗色稿中仍为浅色 CTA,故不覆盖。 */
+[data-theme="dark"] {
+  /* 3D 三轴:深底上要提亮才读得清(浅色稿那三个压深过的值在黑底上发闷) */
+  --color-axis-x: #ff6b61;
+  --color-axis-y: #4ddb85;
+  --color-axis-z: #6da4ff;
+
+  /* 素材库弹窗:设计稿原稿深色值 */
+  --lib-pop: #2a2a2a;
+  --lib-line: #1e1e1e;
+  --lib-ink: #f7f7f7;
+  --lib-muted: #a8a8a8;
+  --lib-fill: #171717;
+  --lib-chip-line: rgba(255, 255, 255, 0.12);
+  --lib-chip-active: rgba(255, 255, 255, 0.1);
+  --lib-input-line: #404040;
+  --lib-placeholder: #737373;
+
+  /* 文字 */
+  --color-ink: #fcfcfc;
+  --color-muted: #7b7b7b;
+
+  /* 表面 / 填充 */
+  --color-surface: #202020;
+  /* Figma grey/800 background/grey-800:Chat/Preview 面板 */
+  --color-surface-2: #262626;
+  /* Figma grey/700:浮面 / 按钮底(如分享按钮) */
+  --color-fill: #2e2e2e;
+  /* hover/填充:插值,比 surface-2 略浅以保留 hover 可感(右栏未直接用) */
+  --color-canvas: #090909;
+  /* 无限画布最底层黑(设计稿深色):中间画布 / GameFrame 舞台 / Files 视图 / thinking 井 */
+  /* 面板根底(旧 canvas #171717):Chat 左栏 / Preview 右栏根 / 页面底 —— 画布沉为 #090909 后独立承载 */
+  --color-shell: #171717;
+  /* 浮层:与 surface 同色(浅色稿亦然),靠 shadow-popover + backdrop-blur 分层;画布沉深后浮层随之提亮才读得清 */
+  --color-pop: #202020;
+
+  /* 描边 */
+  --color-line: #222222;
+  /* Stroke/02 */
+  --color-line-2: #323232;
+  /* Stroke/01 */
+  --color-line-strong: #494949;
+  /* Figma grey/400:画布搜索条等清晰描边 */
+
+  /* Live 绿 */
+  --color-live: #4ccc67;
+
+  /* 错误红:深色稿(底 #232627)上提亮以保证对比 */
+  --color-danger: #ff6166;
+  --color-danger-soft: #ff61661f;
+  --color-danger-fill: #ff616629;
+
+  /* 充值弹窗券横幅底:设计稿 alias-color/bg/neutral/page/tertiary */
+  --color-promo-banner: #262626;
+
+  /* Composer 提示框:去掉实心白高光,改用低透明度白 */
+  --shadow-prompt: 0 18px 24px -20px rgba(0, 0, 0, 0.5), 0 8px 16px -12px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  /* 控件胶囊:去掉刺眼的实心白内高光,改用极淡顶部高光 */
+  --shadow-pill: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+
+  /* Depth/Popover:浅色稿的低透黑影(≤0.07)铺在 #202020 深卡上不可见,弹层与画布卡片糊成一片;
+     深色分层主要靠「亮发丝描边」勾轮廓,落影只留一层克制的近距投影提供区分,不做重投影 */
+  --shadow-popover: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 6px 16px 0 rgba(0, 0, 0, 0.4),
+    0 16px 32px 0 rgba(0, 0, 0, 0.25);
+
+  /* 折叠把手的抬升:深色稿**靠亮发丝独挑大梁** —— 黑落影铺在深画布底上等于没有(同 --shadow-popover
+     那条注释里的道理),故发丝取白;强度与 --shadow-popover 的 0.12 同一档,不加粗 */
+  --elev-edge-handle: drop-shadow(1px 0 0 rgba(255, 255, 255, 0.16)) drop-shadow(-1px 0 0 rgba(255, 255, 255, 0.16))
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.16)) drop-shadow(0 -1px 0 rgba(255, 255, 255, 0.16))
+    drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
+
+  /* 骨架屏高光:--color-line-2(#323232) 与 --color-fill(#313335) 几乎同色导致微光不可见,改用明显更亮的灰 */
+  --color-skeleton-hi: #45484b;
+  /* 入口页游戏卡片底色:两行不同底色(暗色主题) */
+  --color-card-1: #2c2c2c;
+  --color-card-2: #1e1e1e;
+}
+
+/* 设计稿「Button」效果:浅灰渐变 + 1px 描边阴影 + 内高光。
+   此按钮在深色主题中仍是浅色 CTA,故文字/图标(currentColor)恒为深色,
+   不可用随主题翻转的 --color-ink(否则深色稿下变白字白图标贴浅底)。 */
+.btn-raised {
+  background: var(--grad-btn);
+  box-shadow: var(--shadow-btn);
+  color: #121212;
+}
+
+.btn-raised:not(:disabled):hover {
+  filter: brightness(0.98);
+}
+
+/* 设计稿「Submit Button / active」:深色渐变 + 深描边阴影 + 内高光(可发送态) */
+.btn-raised-active {
+  background: linear-gradient(to bottom, #323232, #222);
+  box-shadow: 0 2px 4px -1px rgba(13, 13, 13, 0.5), 0 0 0 1px #333,
+    inset 0 0.5px 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 1.2px 0.35px #121212;
+  color: #fff;
+}
+
+.btn-raised-active:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+/* 设计稿「品牌橙键帽 CTA」(8905:73087):纵向橙渐变 + 4px 硬底沿(稿上是 drop-shadow 而非 inset,
+   故底沿贴在按钮外沿下方,布局上要留出这 4px)。恒浅橙 + 白字,深色主题不翻转。
+   禁用态收掉底沿与渐变退成中性面,避免置灰按钮仍顶着一条橙棕色边。 */
+.btn-brand-key {
+  background-image: linear-gradient(180deg, var(--cta-brand-from) 0%, var(--cta-brand-to) 100%);
+  filter: drop-shadow(0 4px 0 var(--cta-brand-edge));
+  color: var(--color-on-primary-strong);
+}
+
+.btn-brand-key:not(:disabled):hover {
+  filter: drop-shadow(0 4px 0 var(--cta-brand-edge)) brightness(1.05);
+}
+
+.btn-brand-key:disabled {
+  background-image: none;
+  background-color: var(--color-fill);
+  filter: none;
+  color: var(--color-muted);
+}
+
+/* 画布卡片选中态:一束彗星状光沿边框环绕(border beam)。
+   conic-gradient 提供「尾部渐隐 → 亮核 → 锐利头部」的光束,@property 让角度可被动画插值,
+   双层 mask(content-box XOR 全幅)把渐变裁成只剩 1.5px 边框圆环 */
+@property --beam-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.node-beam {
+  position: absolute;
+  inset: -1.5px;
+  border-radius: 17.5px;
+  /* 卡片 16px 圆角 + 1.5px 外扩 */
+  padding: 2px;
+  /* 环厚 2px:盖住 1.5px 边框并向内压 0.5px,让光束略粗于底环 */
+  pointer-events: none;
+  background: conic-gradient(from var(--beam-angle),
+      transparent 0deg 195deg,
+      var(--color-primary) 330deg,
+      #eafffd 354deg,
+      transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: beam-orbit 2.8s linear infinite;
+}
+
+@keyframes beam-orbit {
+  to {
+    --beam-angle: 360deg;
+  }
+}
+
+/* 降低动态偏好:光束停转,退化为完整的纯色选中环 */
+@media (prefers-reduced-motion: reduce) {
+  .node-beam {
+    animation: none;
+    background: var(--color-primary);
+  }
+}
+
+/* 画布连线流光(FlowEdge):蓝色尾巴 + 压在头部的近白亮核,沿路径从父资产流向子资产。
+   路径经 pathLength=1 归一化,dash 比例 = 占整条边的长度;core 的 keyframes 起点
+   前移 0.15(= tail 长 0.22 - core 长 0.07),恰好骑在尾巴最前端 */
+.edge-beam-tail,
+.edge-beam-core {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.edge-beam-tail {
+  stroke: var(--color-primary);
+  stroke-dasharray: 0.22 0.78;
+  animation: edge-beam-run 1.0s linear infinite;
+}
+
+.edge-beam-core {
+  stroke: #eafffd;
+  stroke-dasharray: 0.07 0.93;
+  animation: edge-beam-run-core 1.0s linear infinite;
+}
+
+@keyframes edge-beam-run {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+@keyframes edge-beam-run-core {
+  from {
+    stroke-dashoffset: -0.15;
+  }
+
+  to {
+    stroke-dashoffset: -1.15;
+  }
+}
+
+/* 降低动态偏好:流光隐藏,半透明底线仍标示连接关系 */
+@media (prefers-reduced-motion: reduce) {
+
+  .edge-beam-tail,
+  .edge-beam-core {
+    display: none;
+  }
+}
+
+/* 生成中骨架屏:底色之上一束更亮微光横扫 */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--color-fill) 25%, var(--color-skeleton-hi) 37%, var(--color-fill) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes skeleton-pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 降低动态偏好:取消横扫,改为轻微透明度脉动 */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    background: var(--color-fill);
+    animation: skeleton-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+html,
+body,
+#__app {
+  height: 100%;
+}
+
+/* 画布搜索栏聚焦流光高亮:旋转一整层蓝→紫 conic 渐变,用内罩裁出 1.5px 描边环 + 柔和外光晕。
+   用 transform 旋转(合成属性,跨浏览器稳定重绘),而非动画化 @property 角度
+   (后者配合 mask 时,值虽在变但多数浏览器不重绘 conic 渐变,导致"有高亮无流动")。 */
+@keyframes search-border-spin {
+  to { transform: translate(-50%, -50%) rotate(1turn); }
+}
+.canvas-search-bar {
+  position: relative;
+  isolation: isolate; /* 自成层叠上下文:负 z-index 伪元素只压在搜索栏背景之上、内容之下 */
+  overflow: hidden;   /* 把旋转的渐变层裁剪到圆角矩形内 */
+}
+/* 旋转的渐变层:尺寸大于搜索栏对角线,聚焦时淡入并匀速旋转 */
+.canvas-search-bar::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 520px; /* > 对角线(484×40 → ~486px),旋转到任意角度都能铺满整框;偏大被 overflow:hidden 裁切无副作用 */
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    var(--color-primary), var(--color-3d), var(--color-primary)
+  );
+  z-index: -2;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+/* 内罩:盖住中心,只在边缘露出 1.5px 渐变描边环 */
+.canvas-search-bar::after {
+  content: "";
+  position: absolute;
+  inset: 1.5px; /* 描边宽度 */
+  border-radius: 9999px; /* 胶囊:inset 1.5 后仍为胶囊 */
+  background: var(--color-pop);
+  z-index: -1;
+  pointer-events: none;
+}
+.canvas-search-bar:focus-within::before {
+  opacity: 1;
+  animation: search-border-spin 3s linear infinite;
+}
+.canvas-search-bar:focus-within {
+  box-shadow:
+    0 4px 16px -2px color-mix(in srgb, var(--color-primary) 35%, transparent),
+    0 6px 22px -4px color-mix(in srgb, var(--color-3d) 28%, transparent);
+}
+/* 降低动态偏好:停掉旋转,保留静态渐变描边与光晕 */
+@media (prefers-reduced-motion: reduce) {
+  .canvas-search-bar:focus-within::before { animation: none; }
+}
+
+/* 入口页 PromptBox 输入框:橙青流光边框 + 聚焦炫光(设计稿 357:712)。
+   传统方案:单层 ::before 铺满全框,conic-gradient 橙青环绕,动画旋转渐变角度
+   (@property --pb-angle)→ 整条渐变绕边框流动。mask 用 content-box 与 border-box 异或,
+   只保留 1.5px 的圆环作边框。比例按角度大致分配(青约 6 成、橙约 4 成),不再精确锁定。 */
+@property --pb-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+.prompt-box {
+  position: relative;
+  isolation: isolate;
+  box-shadow: 0 4px 19px 0 rgba(12, 136, 122, 0.3); /* 设计稿基础外发光(青) */
+  transition: box-shadow 240ms ease;
+}
+/* 渐变边框层:压在内容之下、本框背景之上(负 z-index 在自身背景之后绘制),不挡交互。
+   padding=1.5px 即边框宽度;mask 异或裁出外圈圆环,rounded-3xl=24px 对齐圆角。 */
+.prompt-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 24px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--pb-angle),
+    rgb(125, 249, 255) 0deg, rgb(2, 233, 245) 70deg, rgb(61, 208, 192) 110deg,
+    rgb(255, 138, 61) 150deg, rgb(255, 176, 102) 180deg, rgb(255, 138, 61) 210deg,
+    rgb(61, 208, 192) 250deg, rgb(2, 233, 245) 290deg, rgb(125, 249, 255) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask-composite: exclude;
+  animation: pb-border-spin 7s linear infinite;
+}
+/* 角度 0→360 转一整圈,首尾同色无缝循环 */
+@keyframes pb-border-spin {
+  to { --pb-angle: 360deg; }
+}
+.prompt-box:focus-within {
+  box-shadow:
+    0 4px 19px 0 rgba(12, 136, 122, 0.3),
+    0 0 22px -2px rgba(31, 212, 207, 0.4),
+    0 0 36px -8px rgba(1, 241, 255, 0.3),
+    0 0 30px -6px rgba(255, 125, 51, 0.22); /* 微弱暖橙呼应边框橙段 */
+}
+.prompt-box:focus-within::before { animation-duration: 4.5s; } /* 聚焦时流光略快 */
+/* 降低动态偏好:停旋转,保留静态渐变边框 */
+@media (prefers-reduced-motion: reduce) {
+  .prompt-box::before { animation: none; }
+}
+
+/* 入口页 Popular games 预览弹窗动效:沿用青色品牌辉光(呼应 prompt-box)与上浮缩放进场,
+   背景淡入、面板上浮 + 微缩放;关闭走对称退场。data-closing 由组件切换,reduced-motion 自动退化。 */
+@keyframes game-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes game-modal-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes game-modal-pop-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes game-modal-pop-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(0.975); }
+}
+.game-modal-backdrop { animation: game-modal-fade-in 220ms ease-out both; }
+.game-modal-backdrop[data-closing="true"] { animation: game-modal-fade-out 180ms ease-in both; }
+/* 面板:戏剧化暗投影 + 青色辉光描边/外光(品牌色),叠加上浮缩放进场 */
+.game-modal-panel {
+  box-shadow:
+    0 24px 64px -22px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(31, 212, 207, 0.18),
+    0 0 56px -14px rgba(31, 212, 207, 0.3);
+  animation: game-modal-pop-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.game-modal-panel[data-closing="true"] { animation: game-modal-pop-out 170ms ease-in both; }
+/* 降低动态偏好:取消进出场动画,弹窗直接出现/消失,辉光保留 */
+@media (prefers-reduced-motion: reduce) {
+  .game-modal-backdrop,
+  .game-modal-backdrop[data-closing="true"],
+  .game-modal-panel,
+  .game-modal-panel[data-closing="true"] { animation: none; }
+}
+
+html, body, #__app { height: 100%; }
+body {
+  background: var(--color-shell);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 全局滚动条:细条 + 主题色 thumb + 透明槽(去掉深色下的白槽)。Firefox 用 scrollbar-* 属性 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-2) transparent;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* 自动隐藏:thumb 默认透明,仅容器 hover 时显现(用于对话区/下拉菜单等重点滚动区) */
+.scrollbar-auto { scrollbar-color: transparent transparent; }
+.scrollbar-auto:hover { scrollbar-color: var(--color-line-2) transparent; }
+.scrollbar-auto::-webkit-scrollbar-thumb { background: transparent; }
+.scrollbar-auto:hover::-webkit-scrollbar-thumb { background: var(--color-line-2); }
+.scrollbar-auto:hover::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* 完全隐藏滚动条:保留滚动能力,不显示滚动条(用于限高但不想露出滚动条的区域) */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* 对话消息 markdown 渲染:首尾块去外边距,避免气泡内上下多余空白 */
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+/* 流式分段(StreamingText):稳定前缀与增长尾部是相邻两个 .md 实例,补回实例间块间距(等效单实例内段落 my-2 的折叠间距) */
+.md-stream .md + .md > :first-child { margin-top: 0.5rem; }
+/* 围栏代码块内的 code 不套行内胶囊样式(容器外观由 pre 承载) */
+.md pre code { background: transparent; padding: 0; font-size: inherit; border-radius: 0; }
+
+/* 流式尾部光标:细竖条,1s 闪烁;降低动态时不闪 */
+.md-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--color-ink);
+  animation: md-caret-blink 1s steps(2, start) infinite;
+}
+@keyframes md-caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .md-caret { animation: none; }
+}
+
+/* ===== 交互动效统一语汇(见 specs/2026-06-19-workspace-motion-design.md) ===== */
+
+/* 弹层/菜单/Tooltip 进场:微缩放 + 上浮 + 淡入。transform-origin 由使用处指定 */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+.anim-pop-in { animation: pop-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* 通用淡入/淡出 */
+@keyframes mo-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mo-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.anim-media-in { animation: mo-fade-in 200ms ease both; }
+.anim-fade-out { animation: mo-fade-out 200ms ease both; }
+
+/* 资产卡片生成态：静态类型图之上复用 skeleton-shimmer 与 brand-float，
+   不为单一组件新增 keyframes，保持全站动效语汇一致。 */
+.asset-generating-vignette {
+  background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--color-canvas) 58%, transparent));
+}
+.asset-generating-sheen {
+  background-color: transparent;
+}
+
+/* 画布卡片右侧「从此生成」的「+」:在触发带内跟随指针、离带滑回边缘中点并淡出。
+   位置与显隐都用过渡而非 keyframes —— 元件常挂不卸载,一条过渡同时收敛进场/退场/跟随。 */
+.derive-plus {
+  transition: transform 120ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms ease, filter 120ms ease;
+}
+
+/* 「圈成一组」之后的形变过渡(spec 2026-08-20-group-create-selection-morph 决策 2):
+   虚线选框(卡包围盒 + 36px 外扩、圆角 38、1px dashed + 12% 橙纱)收拢成框的选中态。
+   框几何 = 同一个包围盒 + GROUP_PADDING(24) ⟹ 两者每边正好差 12px,这层就从 -12px 收到 0。
+   为什么由框自己播:RF 的 .react-flow__nodesselection-rect 在选区一空的**当帧卸载**、挂不上退场,
+   要留住它就得自绘 overlay 并自己跟随 viewport 的 pan/zoom。
+   实线选中描边由框体自身的选中态承担(它同时在场),这层只负责「虚线 + 橙纱」的收拢与淡出 ——
+   border-style 不可插值,交叉淡入是唯一不新造第二套观感的做法。
+   静态样式 = **终态**(贴边、透明):降低动态下 animation:none 即回落成「什么都没有」,
+   不会定格出一圈虚线残影(纯装饰层,其下框体本体照常渲染) */
+@keyframes group-morph {
+  from {
+    inset: -12px;
+    border-radius: 38px;
+    border-color: var(--color-primary);
+    background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  }
+  /* 中间帧只压色、不碰几何(inset / radius 仍在 from→to 之间整段插值):
+     不留这一帧,虚线与橙纱在收拢完成前就淡透了 —— 用户看到的是「闪一下」而不是「收进去」 */
+  55% {
+    border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  }
+  to {
+    inset: 0;
+    border-radius: 16px;
+    border-color: transparent;
+    background: transparent;
+  }
+}
+.anim-group-morph {
+  position: absolute;
+  inset: 0;
+  border: 1px dashed transparent;
+  border-radius: 16px;
+  background: transparent;
+  pointer-events: none;
+  /* 缓动**刻意不用**进场那条 cubic-bezier(0.22, 1, 0.36, 1):它是为「弹层从触发点缩放」的大位移
+     设计的强 ease-out,前 15% 时间就走完 85% 距离 —— 真机实测 12px 收拢在 ~35ms 内结束,
+     屏幕上只剩虚线闪一下,「同一块面的延续」压根看不出来。改用 ease-out(与 .anim-collapse-in 同档),
+     260ms 里前半程仍在肉眼可辨的速度上 */
+  animation: group-morph 260ms ease-out both;
+}
+
+/* 折叠区展开:轻微下滑淡入(折叠为即时卸载,仅做进场) */
+@keyframes collapse-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.anim-collapse-in { animation: collapse-in 180ms ease-out both; }
+
+/* 模态:遮罩淡入淡出 + 面板上浮缩放进出场(配合 data-closing) */
+@keyframes modal-in  { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: translateY(0)   scale(1);    } }
+@keyframes modal-out { from { opacity: 1; transform: translateY(0)   scale(1);    } to { opacity: 0; transform: translateY(6px) scale(0.98); } }
+.modal-backdrop { animation: mo-fade-in 200ms ease both; }
+.modal-backdrop[data-closing="true"] { animation: mo-fade-out 160ms ease both; }
+.modal-pop { animation: modal-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.modal-pop[data-closing="true"] { animation: modal-out 160ms ease-in both; }
+
+/* Toast:顶部下滑淡入 / 对称退场 */
+@keyframes toast-in  { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-8px); } }
+.toast-pop { animation: toast-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.toast-pop[data-closing="true"] { animation: toast-out 160ms ease-in both; }
+
+/* 积分类弹窗 hero 的 WordArt 标题(Figma 3082:41190):品牌橙三段纵向渐变裁进文字。
+   三种 hero(INSUFFICIENT / ALMOST OUT OF / WELCOME BACK)共用这一个类。
+   静态装饰,勿在其上叠动画层(background-clip:text 合成层坑,见 memory)。
+   渐变深/浅两端由 --color-primary 派生,避免引入新的字面色值 */
+.hero-wordart {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-primary) 0.5%,
+    color-mix(in srgb, var(--color-primary) 68%, #371801) 33%,
+    color-mix(in srgb, var(--color-primary) 36%, white) 68%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* UPGRADE FOR MORE 字标的贴纸描边(设计稿 9433:70190):厚白边 + 深色落影,把橙字从
+   实景照片上拔出来。
+   描边与渐变裁字**不能挂在同一元素**:text-stroke 会被 background-clip:text 的填充盖掉。
+   也不能用 z-index:-1 的伪元素垫底 —— 绘制顺序是「父背景 → 负 z-index 后代」,白副本
+   反而糊在橙字之上(实测踩过)。故由组件渲染两层同文本:描边副本在下,渐变文字压在上。 */
+/* 贴纸字标的填充:三段严格照稿(橙 → 深棕橙 → 橙)。与 .hero-wordart 的区别只在末段——
+   那条为宝箱 hero 调过,末段掺白提亮,压在实景照片上会发灰;此处覆盖回饱和橙。 */
+.hero-wordart-warm {
+  background-image: linear-gradient(
+    180deg,
+    var(--color-primary) 0.5%,
+    color-mix(in srgb, var(--color-primary) 68%, #371801) 35%,
+    var(--color-primary) 68%
+  );
+}
+
+/* 描边层。颜色与粗细由使用方经 --wordart-stroke / --wordart-stroke-w 注入:
+   all-plans 压在实景照片上用厚白边,宝箱系压在深色渐变上用深棕边(见设计稿 5952:84376)。 */
+.hero-wordart-stroke {
+  -webkit-text-stroke: var(--wordart-stroke-w, 9px) var(--wordart-stroke, #fff);
+  paint-order: stroke fill;
+  color: var(--wordart-stroke, #fff);
+  /* 落影跟着描边层走(挂在渐变层上会被它的透明填充吃掉) */
+  filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.25)) drop-shadow(0 10px 14px rgba(0, 0, 0, 0.35));
+}
+
+/* 宝箱系字标的填充:三段实色严格照稿(5952:84376 / 8047:165129)。
+   不从 --color-primary 派生 —— 稿上这三段与品牌橙不在同一条曲线上,派生值压在深底渐变上发灰。 */
+.hero-wordart-chest {
+  background-image: linear-gradient(180deg, #ff7719 0.5%, #d86c21 35.8%, #ffae76 67.9%);
+}
+
+/* ── 完整订阅弹窗(all-plans,设计稿 9433:70184)──────────────────────────────
+   该弹窗恒暗,四组样式全部集中在这里:卡面 / 顶部高光 / 斜切徽标 / 键帽 CTA / 斜杠划线。
+   透明度层一律 color-mix 派生自上面的 --upsell-* 令牌,不写第二份字面色值。
+   纯静态样式,无 keyframes —— 弹窗进退场仍走 .modal-pop / .modal-backdrop。 */
+
+/* 卡面:三档各一套光晕。starter 左缘白光,creator 左上柠檬绿,master 右上玫红(另加落影) */
+.upsell-card-starter {
+  background-image:
+    radial-gradient(ellipse 197px 1080px at 3% 42%,
+      color-mix(in srgb, var(--upsell-text) 9.4%, transparent),
+      color-mix(in srgb, var(--upsell-text) 3.5%, transparent) 42%,
+      color-mix(in srgb, var(--upsell-text) 1%, transparent) 100%),
+    linear-gradient(180deg, var(--upsell-card-starter-from) 0%, var(--upsell-card-starter-to) 100%);
+}
+.upsell-card-creator {
+  background-image:
+    linear-gradient(210deg,
+      color-mix(in srgb, var(--upsell-glow-creator) 16%, transparent) 0%,
+      color-mix(in srgb, var(--upsell-glow-creator) 8%, transparent) 28%,
+      transparent 62%),
+    linear-gradient(90deg, var(--upsell-card) 0%, var(--upsell-card) 100%);
+}
+.upsell-card-master {
+  background-image:
+    radial-gradient(ellipse 492px 265px at 100% 0%,
+      color-mix(in srgb, var(--upsell-promo) 32%, transparent),
+      color-mix(in srgb, var(--upsell-promo) 15%, transparent) 42%,
+      transparent 78%),
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--upsell-promo) 13%, transparent) 0%,
+      color-mix(in srgb, var(--upsell-promo) 7%, transparent) 36%,
+      transparent 72%),
+    linear-gradient(90deg, var(--upsell-card) 0%, var(--upsell-card) 100%);
+  box-shadow: 0 24px 64px 0 rgba(0, 0, 0, 0.24);
+}
+
+/* 模型锁定弹窗的单档卡:主站 paywall 的 planSheen —— 柠檬绿斜向光泽**不分档位**
+   (三档窗那三套是按档换光晕,语义不同,不要互相套用)。底面同 --upsell-card。 */
+.upsell-card-paywall {
+  background-image:
+    linear-gradient(248deg,
+      color-mix(in srgb, var(--upsell-glow-creator) 10%, transparent) 0%,
+      color-mix(in srgb, var(--upsell-glow-creator) 5%, transparent) 11%,
+      transparent 71%),
+    linear-gradient(90deg, var(--upsell-card) 0%, var(--upsell-card) 100%);
+}
+
+/* 卡面顶部白色高光(稿上是一层 mask 过的渐变):挂在 absolute 覆盖层上,不参与布局 */
+.upsell-card-sheen {
+  background-image: linear-gradient(180deg,
+    var(--upsell-sheen) 0%,
+    color-mix(in srgb, var(--upsell-text) 9%, transparent) 18%,
+    color-mix(in srgb, var(--upsell-text) 3%, transparent) 38%,
+    transparent 72%);
+}
+
+/* 斜切徽标(20% OFF / RECOMMENDED / BEST VALUE):外层斜切成平行四边形,内层反向斜回来
+   把文字摆正。字体用 Inter Bold 代替稿上的 Space Grotesk(不为三个徽标引第四套字体)。 */
+.upsell-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 2px;
+  transform: skewX(-10.89deg);
+}
+.upsell-badge > span {
+  display: block;
+  transform: skewX(10.89deg);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 12.5px;
+  text-transform: uppercase;
+  color: var(--upsell-text);
+}
+.upsell-badge-off { background: var(--upsell-promo); }
+.upsell-badge-blue {
+  background-image: linear-gradient(100deg, var(--upsell-badge-blue-from) 0%, var(--upsell-badge-blue-to) 100%);
+}
+
+/* 键帽 CTA:外层双层落影 + 底沿 3px 内阴影(实体按键感)。底沿颜色按档位换,
+   故 --upsell-key-edge 由变体类给值,基类只负责形状与阴影结构。 */
+.upsell-key {
+  box-shadow:
+    0 6px 4px 0 rgba(0, 0, 0, 0.25),
+    0 32px 24px 0 rgba(0, 0, 0, 0.15),
+    inset 0 -3px 0 0 var(--upsell-key-edge);
+  color: var(--upsell-cta-ink);
+}
+.upsell-key-starter {
+  --upsell-key-edge: rgba(0, 0, 0, 0.1);
+  background: var(--upsell-text);
+}
+.upsell-key-creator {
+  --upsell-key-edge: var(--upsell-key-creator-edge);
+  background-image:
+    linear-gradient(180deg, transparent 0%, var(--upsell-glow-creator-lift) 100%),
+    linear-gradient(90deg, var(--upsell-glow-creator) 0%, var(--upsell-glow-creator) 100%);
+}
+.upsell-key-master {
+  --upsell-key-edge: rgba(0, 0, 0, 0.32);
+  background: var(--upsell-cta-master);
+}
+/* 模型锁定弹窗的橙键帽(主站 ctaFill + ctaShadow):底沿是 4px 实色而非三档窗的 3px 内阴影 */
+.upsell-key-orange {
+  --upsell-key-edge: var(--upsell-key-orange-edge);
+  background-image:
+    linear-gradient(180deg, var(--upsell-cta-orange-from) 0%, var(--upsell-cta-orange-to) 100%);
+  color: var(--upsell-text);
+}
+
+/* 禁用态(当前档 Current plan / 更低档 Included):去掉键帽立体感,退成中性面 */
+.upsell-key-off {
+  --upsell-key-edge: transparent;
+  background: var(--upsell-panel);
+  box-shadow: none;
+  color: var(--upsell-text-muted);
+}
+
+/* 划线价:稿上不是平直删除线,而是一根旋转 -13° 的粉色斜杠压在数字上 */
+.upsell-strike { position: relative; }
+.upsell-strike::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--upsell-promo);
+  transform: translateY(-50%) rotate(-13.31deg);
+}
+
+/* Composer 输入卡聚焦光晕(克制:边框转 accent + 一圈柔光环,不上浮不旋转) */
+.composer-card { transition: border-color 180ms ease, box-shadow 180ms ease; }
+.composer-card:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-prompt), 0 0 0 3px var(--color-primary-soft);
+}
+
+/* 素材库音频播放中指示:三根音柱自底部交错伸缩(配 style 的 animationDelay 错峰) */
+.lib-eq-bar {
+  transform-origin: bottom;
+  animation: lib-eq 0.9s ease-in-out infinite;
+}
+@keyframes lib-eq {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* 品牌加载动画(LoadingScreen variant='brand'):logo 弹入→呼吸浮动,字标逐字浮现→循环扫光。
+   进场缓动统一 cubic-bezier(0.22,1,0.36,1);颜色只用 --color-primary(-soft),深浅主题自动适配 */
+/* 品牌启动层静态底:画布色 + 中心 品牌橙柔光,沉静聚焦中心动画;静态无动画,无需 reduced-motion 处理 */
+.brand-backdrop {
+  background:
+    radial-gradient(closest-side, var(--color-primary-soft), transparent 70%) center / 720px 720px no-repeat,
+    var(--color-canvas);
+}
+.brand-logo-in { animation: brand-logo-in 400ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes brand-logo-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+/* 呼吸浮动:上下 3px 浮动;进场结束后接管(延迟=进场时长)。原 品牌橙柔光圈已去除(观感突兀) */
+.brand-float { animation: brand-logo-in 400ms cubic-bezier(0.22, 1, 0.36, 1) both, brand-float 2.6s ease-in-out 400ms infinite; }
+@keyframes brand-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.brand-letter { animation: brand-letter-in 350ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes brand-letter-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* 字标扫光覆盖层:透明→品牌橙→透明渐变只裁出高光带,叠在正常着色的字母上方。
+   不能把 clip:text 放在带动画子元素的父层——Chromium 下子层动画提升为合成层后父层裁切背景画不进去(字全透明) */
+.wordmark-sheen {
+  background: linear-gradient(100deg, transparent 42%, var(--color-primary) 50%, transparent 58%) 0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: wordmark-sheen 2.2s ease-in-out 600ms infinite both;
+}
+@keyframes wordmark-sheen {
+  from { background-position: 125% 0; }
+  to { background-position: -25% 0; }
+}
+/* 揭幕退场:整层淡出的同时,中心内容轻微放大淡出(240ms,退场用 ease-in),制造"揭开进入工作台"的收束感 */
+.brand-exit { animation: brand-exit 240ms ease-in both; }
+@keyframes brand-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 内容承载类:只关动画,元素必须留在页面上 —— 这些 class 挂在图片 / 媒体区 / 模态 / Toast /
+     启动页 logo 与字标**本体**上,若按纯装饰那样 display:none,开了「减少动态」的用户会直接看不见内容。
+     进场动画都带 both,去掉动画即回落静态样式(opacity 1、无位移);
+     退场类同理:各处退场都由定时器驱动(useExitTransition / useRequestClose,reduce 下延时视为 0)、
+     无一处依赖 animationend,故关掉动画不会残留半透明层。契约由 globals-reduced-motion.test.ts 守护 */
+  .anim-pop-in,
+  .anim-media-in,
+  .anim-fade-out,
+  .anim-collapse-in,
+  .brand-logo-in,
+  .brand-float,
+  .brand-letter,
+  .brand-exit,
+  .modal-backdrop, .modal-backdrop[data-closing="true"],
+  .modal-pop, .modal-pop[data-closing="true"],
+  /* 音柱同属内容承载类:它是素材库音频「真正出声了」的唯一指示(徽章三态的第三态),
+     隐掉就退回一个空圆圈 —— 用户看不出自己点响了没有。关动画即定格三根满高柱子 */
+  .lib-eq-bar,
+  /* 成组形变层:虽是纯装饰,静态样式已等于终态(贴边 + 全透明),故 animation:none 就够 ——
+     不必为它开 display:none 的特例 */
+  .anim-group-morph,
+  .toast-pop, .toast-pop[data-closing="true"] { animation: none; }
+  /* 纯装饰覆盖层:其下另有静态内容(字标本体 / 类型占位图),整层隐藏无损功能。
+     wordmark-sheen 尤其不能只关动画 —— 它靠 text-fill-color:transparent 裁高光带,静态化会盖出一道死高光 */
+  .wordmark-sheen,
+  .asset-generating-sheen.skeleton-shimmer { display: none; }
+
+  /* Tailwind 的 animate-spin(各处 spinner)**刻意不禁用**:旋转是「还在转、没卡死」的唯一指示,
+     静止的圆环会被读成界面挂了。降低动态的诉求是「别让人眩晕」,匀速小半径旋转不在此列(Nick 拍板) */
+
+  .composer-card { transition: none; }
+  /* 「+」是功能元件,降低动态下只去掉过渡(同理不能 display:none,否则入口消失) */
+  .derive-plus { transition: none; }
+  .canvas-tidying .react-flow__node { transition: none; }
+}
+
+/* 画布全景 minimap:沿用浮层令牌,不引入新色;进退场复用 .anim-pop-in(已在 reduced-motion 禁用列表) */
+.react-flow__minimap.canvas-minimap {
+  /* 居中靠 .center 的 left:50% + margin-left 左移半宽(width 240);不能用 transform 居中——会被 .anim-pop-in 的 transform 覆盖。bottom 抬高 84px 让出工具条 */
+  margin: 0 0 84px -120px;
+  background-color: var(--color-pop);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+}
+.canvas-minimap .react-flow__minimap-mask {
+  fill: var(--color-fill);
+  fill-opacity: 0.5;
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  stroke-opacity: 0.9;
+}
+.canvas-minimap .react-flow__minimap-node {
+  rx: 3px;
+  ry: 3px;
+}
+
+/* 一键整理:整理期间给画布容器加 .canvas-tidying,节点 transform 变化时平滑滑到新位;拖拽时无此类,保持瞬时 */
+.canvas-tidying .react-flow__node { transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* 画布左键框选矩形:改走 RF 预留的 --xy-selection-* 变量覆盖默认蓝(rgba(0,89,220)),
+   变量优先级不受 style.css 与本文件的加载顺序影响,同名类覆盖会输给后加载的库样式。
+   边框**虚线**(spec 2026-08-19-group-card-selection-polish 问题 5):与松手后那圈包围框
+   同一套边型,「正在框」与「框好了」读成同一块面的延续,而不是两种不同的东西 */
+.react-flow {
+  --xy-selection-background-color: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --xy-selection-border: 1px dashed var(--color-primary);
+}
+.react-flow__selection {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border: 1px dashed var(--color-primary);
+}
+
+/* 多选整组包围框:一层品牌橙虚线 + 与拉选矩形同一份柔光底,离选区外扩 36px 内边距。
+   .react-flow 前缀提高特异性,确实盖掉 RF 自带的紧贴默认边框(否则与下方 ::before 成双层框);
+   虚线与底色都画在外扩的 ::before 上(圆角走伪元素稳定渲染),不改 rect 尺寸(拖拽命中区不变)。
+   内边距 14px → 36px(spec 2026-08-19 问题 5,36 是 Nick 两轮实机拍的值):组卡进选区后,
+   框自带 16px 圆角与成员卡的间距,贴太紧会让框的圆角线与包围框的圆角线几乎并在一起。
+   36px 还顺带让框的标题条(在框上沿外 32px)整条落进包围框内,不再被虚线横穿;
+   圆角同步到 38px 保持观感 */
+.react-flow .react-flow__nodesselection-rect {
+  background: transparent;
+  border: none;
+}
+.react-flow__nodesselection-rect::before {
+  content: '';
+  position: absolute;
+  inset: -36px;
+  border: 1px dashed var(--color-primary);
+  border-radius: 38px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  pointer-events: none;
+}
+/* ⚠️ 这层橙纱**刻意盖在选中的卡片之上**(RF 给 .react-flow__nodesselection 的 z-index 是 3,
+   而本画布 zIndexMode="manual" 下节点 z 只有 -1/0/1):Nick 要的正是「选框保留拉选状态的底色」,
+   两个状态因此是同一块面的延续。文字对比度不受影响(12% 橙把浅色底抬到 ≈#fdeade、深色 ≈#382a1d,
+   对 --color-ink 均远超 4.5:1)。别当 bug 修掉 */
+/* 分组框的键盘焦点环(spec 2026-08-13-group-a11y-and-menu-debts 决策 3)。
+   框节点本来就在 Tab 序里(RF 的 nodesFocusable 默认 true),但没有可见焦点反馈 —— 键盘用户
+   不知道自己停在哪个框上。用 outline 而非 box-shadow:outline 不参与布局,且与选中态视觉可分 ——
+   焦点环恒在外沿 2px 处、静止,选中态是贴边的 1.5px 描边 + 会转的 .node-beam
+   (原先的对照物是「柔光外晕 box-shadow」,已随 2026-08-19-group-card-selection-polish 问题 4 退役)。
+   :focus-visible 而非 :focus —— 鼠标点选不该冒出焦点环。
+   无动画,故不涉及 prefers-reduced-motion */
+.react-flow__node-groupFrame:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 16px;   /* 与框体 rounded-[16px] 对齐,免得方框套圆角 */
+}
+
+/* 只选中一张卡(含框选只命中一张)时不套整组虚线框:隐藏虚线 + 放行覆盖层指针事件,
+   让这张卡回归普通单选态(卡片自身 node-beam + 可直接 hover/点击/拖拽,由节点自身处理) */
+.canvas-single-select .react-flow__nodesselection-rect {
+  pointer-events: none;
+}
+.canvas-single-select .react-flow__nodesselection-rect::before {
+  display: none;
+}

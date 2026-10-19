@@ -1,0 +1,65 @@
+# 生产部署：仅手动触发（workflow_dispatch），部署源必须是 release 分支（对齐 koubou lab-prod 口径）。
+# prod 不绑定任何分支/tag 自动触发——上线永远是人按下的。
+#
+# 🔴 branch 刻意无默认值：默认成 main 就等于「随手一点就把 main 上尚未验证的新内容一起发出去」，
+#    而 release/YYYY-MM-DD 是从 main 切出的冻结快照，才是 prod 该跑的东西。填错会被
+#    _deploy.yml 的 Validate deploy source 拦下（口径见
+#    specs/2026-08-27-merge-strategy-alignment-design.md §5.4/§5.5）。回滚 = 重新 dispatch 上一条 release。
+name: Deploy (production)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 部署源 release 分支（如 release/2026-08-27；无默认，必须显式填）
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # 部署目标由运维变量 `WEB_DEPLOY_TARGETS`（逗号分隔）决定，不是代码常量。
+  # 未配置时解析为单目标 `rezonaai` —— 与迁移前逐字一致的行为。
+  targets:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.resolve.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: deploy/deploy_targets.sh
+          sparse-checkout-cone-mode: false
+      - id: resolve
+        env:
+          TARGETS: ${{ vars.WEB_DEPLOY_TARGETS }}
+        run: bash deploy/deploy_targets.sh
+
+  deploy:
+    needs: [targets]
+    # fail-fast: false —— 一条腿失败**不取消**另一条在途的腿。本仓每条腿自成闭环
+    # （构建 → apply → rollout status 都在 _deploy.yml 内部），所以矩阵红了也不会
+    # 让另一个项目少做任何事；需要防的只是「互相取消」。
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    uses: ./.github/workflows/_deploy.yml
+    secrets: inherit
+    with:
+      gcp_target: ${{ matrix.target.gcp_target }}
+      environment: production
+      namespace: rezonalab-game-prod
+      app_env: production
+      hpa_min: "2"
+      hpa_max: "10"
+      # prod 后端走 rezona.ai 共享网关（pgc 全量挂 /game/pgcserver、koubou 挂 /game/koubou，
+      # 前缀在应用代码层拼接，env 只存裸域名）。主域 2026-09-03 从 lab.rezona.ai 迁到 rezona.ai：
+      # 旧域 /game/* 永久直连，但页面路径 301 到新域，浏览器面（public_pgc_base_url：koubou WS、
+      # pv iframe、资产直连）留在旧域会与用户登录所在的 rezona.ai 不同源；服务端代理面
+      # （pgc_base_url）本可不动，为「一个环境一个 host」一并切新域。LB/urlmap 由 lab 侧维护。
+      pgc_base_url: https://rezona.ai
+      public_pgc_base_url: https://rezona.ai
+      # branch 是 required 且无默认，恒非空——不再需要 github.ref_name 兜底
+      ref: ${{ inputs.branch }}

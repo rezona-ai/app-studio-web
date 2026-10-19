@@ -1,0 +1,18 @@
+#!/bin/sh
+# 给特性分支上的提交自动追加 `Feature:` trailer —— 看板据它判定 feature 身份。
+# 判定与改写在 scripts/commit-trailer/（纯逻辑有单测），本文件只负责调起来。
+#
+# 契约见 docs/superpowers/specs/2026-08-28-board-trailer-identity-design.md。
+# 本钩子**永不阻断提交**：贴不上身份顶多让看板少认一条，不该让人提交不了代码。
+# 但也**不静默** —— 本仓踩过 core.hooksPath 指向旧仓、钩子全体静默失效的坑（spec §4.3），
+# 所以贴不上时往 stderr 说一声，让人有机会发现。
+
+if [ ! -x node_modules/.bin/tsx ]; then
+  echo "warn: 未装依赖（node_modules/.bin/tsx 不存在），跳过 Feature trailer" >&2
+  exit 0
+fi
+
+node_modules/.bin/tsx scripts/commit-trailer/index.ts "$1" || {
+  echo "warn: Feature trailer 未贴上（看板可能少认这条）；自查：git config --get core.hooksPath" >&2
+  exit 0
+}

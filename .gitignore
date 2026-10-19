@@ -1,36 +1,31 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
+# 依赖
 /node_modules
-/.pnp
-.pnp.js
 
-# testing
+# Next.js 构建产物
+/.next
+/out
+next-env.d.ts
+
+# 测试 / 覆盖率
 /coverage
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
+# 环境变量
 .env
+.env*.local
 
-# vercel
-.vercel
-
-# typescript
+# 杂项
+.DS_Store
 *.tsbuildinfo
-next-env.d.ts
+
+# playwright/调试产物
+.playwright-mcp/
+/*.png
+
+# 本地工作区(worktree 等)与 Claude Code 本地设置,勿提交
+.claude/
+
+# 功能上线看板生成产物
+release-board.html
+
+# 控制面脚本的临时 checkout（_deploy.yml 从 workflow 版本拉的），绝不能进构建上下文/工作树
+.control-plane/

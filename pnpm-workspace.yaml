@@ -1,0 +1,10 @@
+allowBuilds:
+  # dd-trace 原生可选模块（ASM/IAST/profiling/runtime-metrics）不编译：
+  # node:22-slim 运行镜像无 node-gyp 工具链，且本仓库只用基础 APM tracing（纯 JS 即可）。
+  '@datadog/native-appsec': false
+  '@datadog/native-iast-taint-tracking': false
+  '@datadog/native-metrics': false
+  '@datadog/pprof': false
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
